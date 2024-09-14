@@ -1313,7 +1313,6 @@ dependencies = [
  "hematite-nbt",
  "itertools 0.13.0",
  "mchprs_blocks",
- "mchprs_network",
  "rustc-hash 2.0.0",
  "serde",
 ]
