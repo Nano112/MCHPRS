@@ -68,11 +68,11 @@ impl<'p, W: World> PassManager<'p, W> {
 
             trace!("Running pass: {}", pass.name());
             monitor.set_message(pass.status_message().to_string());
-            let start = Instant::now();
+            // let start = Instant::now();
 
             pass.run_pass(&mut graph, options, input);
 
-            trace!("Completed pass in {:?}", start.elapsed());
+            // trace!("Completed pass in {:?}", start.elapsed());
             trace!("node_count: {}", graph.node_count());
             trace!("edge_count: {}", graph.edge_count());
             monitor.inc_progress();

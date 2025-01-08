@@ -1,8 +1,11 @@
-mod backend;
+pub mod backend;
 mod compile_graph;
 mod task_monitor;
 // mod debug_graph;
 mod passes;
+// use instant::Instant;
+
+pub use backend::direct::DirectBackend;
 
 use backend::{BackendDispatcher, JITBackend};
 use mchprs_blocks::blocks::Block;
@@ -11,7 +14,7 @@ use mchprs_world::TickEntry;
 use mchprs_world::{for_each_block_mut_optimized, World};
 use passes::make_default_pass_manager;
 use std::sync::Arc;
-use std::time::Instant;
+// use std::time::Instant;
 use tracing::{debug, error, trace, warn};
 
 pub use task_monitor::TaskMonitor;
@@ -128,10 +131,12 @@ impl Compiler {
         monitor: Arc<TaskMonitor>,
     ) {
         debug!("Starting compile");
-        let start = Instant::now();
+        // let start = Instant::now();
+
 
         let input = CompilerInput { world, bounds };
         let pass_manager = make_default_pass_manager::<W>();
+
         let graph = pass_manager.run_passes(&options, &input, monitor.clone());
 
         if monitor.cancelled() {
@@ -144,6 +149,7 @@ impl Compiler {
             }
             None => true,
         };
+
         if replace_jit {
             debug!("Switching jit backend to {:?}", options.backend_variant);
             let jit = match options.backend_variant {
@@ -155,19 +161,19 @@ impl Compiler {
         if let Some(jit) = &mut self.jit {
             trace!("Compiling backend");
             monitor.set_message("Compiling backend".to_string());
-            let start = Instant::now();
+            // let start = Instant::now();
 
             jit.compile(graph, ticks, &options, monitor.clone());
 
             monitor.inc_progress();
-            trace!("Backend compiled in {:?}", start.elapsed());
+            // trace!("Backend compiled in {:?}", start.elapsed());
         } else {
             error!("Cannot compile without JIT variant selected");
         }
 
         self.options = options;
         self.is_active = true;
-        debug!("Compile completed in {:?}", start.elapsed());
+        // debug!("Compile completed in {:?}", start.elapsed());
     }
 
     pub fn reset<W: World>(&mut self, world: &mut W, bounds: (BlockPos, BlockPos)) {
