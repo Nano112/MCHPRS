@@ -7,7 +7,7 @@ mod passes;
 
 pub use backend::direct::DirectBackend;
 
-use backend::{BackendDispatcher, JITBackend};
+pub use backend::{BackendDispatcher, JITBackend};
 use mchprs_blocks::blocks::Block;
 use mchprs_blocks::BlockPos;
 use mchprs_world::TickEntry;
