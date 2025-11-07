@@ -285,9 +285,7 @@ impl JITBackend for DirectBackend {
 
     fn set_signal_strength(&mut self, pos: BlockPos, strength: u8) {
         if let Some(&node_id) = self.pos_map.get(&pos) {
-            // Schedule immediate tick to ensure signal propagates through the circuit
-            self.schedule_tick(node_id, 0, TickPriority::Highest);
-            // Set the node state
+            // set_node already handles propagation to neighbors via update::update_node
             self.set_node(node_id, strength > 0, strength);
         } else {
             warn!("Tried to set signal strength at position {} which is not a redpiler node", pos);
