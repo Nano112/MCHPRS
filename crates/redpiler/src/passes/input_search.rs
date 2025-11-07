@@ -154,11 +154,18 @@ impl<'a, W: World> InputSearchState<'a, W> {
                 }
             }
         } else if self.provides_weak_power(block, pos, side) {
-            self.graph.add_edge(
-                self.pos_map[&pos],
-                start_node,
-                CompileLink::new(link_ty, distance),
-            );
+            eprintln!("[DEBUG add_edge] FROM {:?} (pos={:?}) TO node {:?}, distance={}", 
+                      self.pos_map.get(&pos), pos, start_node, distance);
+            if let Some(&from_node) = self.pos_map.get(&pos) {
+                self.graph.add_edge(
+                    from_node,
+                    start_node,
+                    CompileLink::new(link_ty, distance),
+                );
+            } else {
+                eprintln!("[DEBUG add_edge] ERROR: Position {:?} not in pos_map!", pos);
+            }
+        
         } else if let Block::RedstoneWire { wire } = block {
             match side {
                 BlockFace::Top => self.search_wire(start_node, pos, link_ty, distance),
