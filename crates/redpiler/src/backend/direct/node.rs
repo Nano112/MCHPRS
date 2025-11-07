@@ -164,4 +164,6 @@ pub struct Node {
     pub output_power: u8,
     pub changed: bool,
     pub pending_tick: bool,
+    /// For custom IO: if true, output_power was manually set via set_signal_strength
+    pub custom_io_override: bool,
 }

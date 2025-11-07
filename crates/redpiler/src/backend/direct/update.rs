@@ -87,6 +87,12 @@ pub(super) fn update_node(
             }
         }
         NodeType::Wire => {
+            // Custom IO wires with manual override keep their set power
+            if node.is_io && node.custom_io_override {
+                // Power was manually set via set_signal_strength, don't recalculate
+                return;
+            }
+            
             let (input_power, _) = get_all_input(node);
             if node.output_power != input_power {
                 node.output_power = input_power;

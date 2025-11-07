@@ -313,6 +313,11 @@ impl SSRangeAnalysis {
     }
 
     fn range_for_no_inputs(ty: &NodeType, state: &NodeState, is_input: bool, is_output: bool) -> SSRange {
+        // Custom IO nodes (any type) can have variable power when used for injection
+        if (is_input || is_output) && !matches!(ty, NodeType::Button | NodeType::Lever | NodeType::PressurePlate) {
+            return SSRange::FULL;
+        }
+        
         match ty {
             NodeType::Repeater { .. }
             | NodeType::Comparator { .. }
@@ -322,14 +327,7 @@ impl SSRangeAnalysis {
             | NodeType::Wire
             | NodeType::NoteBlock { .. } => SSRange::constant(0),
             NodeType::Torch => SSRange::constant(15),
-            NodeType::Constant => {
-                // Custom IO Constants (marked as input/output) can have variable power
-                if is_input || is_output {
-                    SSRange::FULL
-                } else {
-                    SSRange::constant(state.output_strength)
-                }
-            },
+            NodeType::Constant => SSRange::constant(state.output_strength),
             NodeType::Button | NodeType::Lever | NodeType::PressurePlate => SSRange::FULL,
         }
     }

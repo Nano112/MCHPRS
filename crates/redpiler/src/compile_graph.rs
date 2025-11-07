@@ -23,6 +23,7 @@ pub enum NodeType {
     Trapdoor,
     Wire,
     Constant,
+    CustomIO, // Custom IO nodes can inject and monitor redstone signals
     NoteBlock {
         instrument: Instrument,
         note: u32,

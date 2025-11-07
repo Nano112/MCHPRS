@@ -65,7 +65,6 @@ impl<'a, W: World> InputSearchState<'a, W> {
     fn provides_weak_power(&self, block: Block, pos: BlockPos, side: BlockFace) -> bool {
         // Custom IO wires act as power sources (like redstone blocks)
         if self.custom_io.contains(&pos) && matches!(block, Block::RedstoneWire { .. }) {
-            eprintln!("[DEBUG provides_weak_power] Custom IO wire at {:?} provides power", pos);
             return true;
         }
         
@@ -157,17 +156,12 @@ impl<'a, W: World> InputSearchState<'a, W> {
             if let Some(&from_node) = self.pos_map.get(&pos) {
                 // Don't create self-loops
                 if from_node != start_node {
-                    eprintln!("[DEBUG add_edge] FROM {:?} TO node {:?}, distance={}", from_node, start_node, distance);
                     self.graph.add_edge(
                         from_node,
                         start_node,
                         CompileLink::new(link_ty, distance),
                     );
-                } else {
-                    eprintln!("[DEBUG add_edge] Skipping self-loop at {:?}", from_node);
                 }
-            } else {
-                eprintln!("[DEBUG add_edge] ERROR: Position {:?} not in pos_map!", pos);
             }
         
         } else if let Block::RedstoneWire { wire } = block {

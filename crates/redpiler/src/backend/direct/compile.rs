@@ -73,15 +73,9 @@ fn compile_node(
     side_inputs.ss_counts[0] += (MAX_INPUTS - side_input_count) as u8;
 
     use crate::compile_graph::NodeType as CNodeType;
-    // Note: Constants CAN have outgoing links for custom IO nodes
-    // Regular redstone blocks don't need them, but custom IO Constants do
-    let outgoing_edges: Vec<_> = graph.edges_directed(node_idx, Direction::Outgoing).collect();
-    if node.ty == CNodeType::Constant && (node.is_input || node.is_output) {
-        eprintln!("[DEBUG compile] Custom IO Constant at node {:?}: {} outgoing edges in graph", 
-                  node_idx, outgoing_edges.len());
-    }
-    let updates: SmallVec<[ForwardLink; 10]> = outgoing_edges
-        .into_iter()
+    // Note: All nodes can have outgoing links (including custom IO nodes)
+    let updates: SmallVec<[ForwardLink; 10]> = graph
+        .edges_directed(node_idx, Direction::Outgoing)
         .sorted_by_key(|edge| nodes_map[&edge.target()])
         .into_group_map_by(|edge| std::mem::discriminant(&graph[edge.target()].ty))
         .into_values()
@@ -97,9 +91,6 @@ fn compile_node(
             ForwardLink::new(target_id, weight.ty == LinkType::Side, weight.ss)
         })
         .collect();
-    if node.ty == CNodeType::Constant && (node.is_input || node.is_output) {
-        eprintln!("[DEBUG compile] Custom IO Constant: {} updates after compilation", updates.len());
-    }
     stats.update_link_count += updates.len();
 
     let ty = match &node.ty {
@@ -145,6 +136,7 @@ fn compile_node(
         pending_tick: false,
         changed: false,
         is_io: node.is_input || node.is_output,
+        custom_io_override: false,
     }
 }
 

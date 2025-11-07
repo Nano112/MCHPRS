@@ -35,13 +35,7 @@ impl<W: World> Pass<W> for UnreachableOutput {
             // is too high.
             let mut outgoing = graph.neighbors_directed(idx, Direction::Outgoing).detach();
             while let Some((edge_idx, _)) = outgoing.next(graph) {
-                let edge_ss = graph[edge_idx].ss;
-                if edge_ss >= range.high {
-                    let node = &graph[idx];
-                    if node.ty == NodeType::Constant && (node.is_input || node.is_output) {
-                        eprintln!("[DEBUG unreachable_output] REMOVING edge from custom IO {:?}: edge_ss={} >= range.high={}", 
-                                  idx, edge_ss, range.high);
-                    }
+                if graph[edge_idx].ss >= range.high {
                     graph.remove_edge(edge_idx);
                 }
             }
