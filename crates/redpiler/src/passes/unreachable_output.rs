@@ -4,7 +4,7 @@
 //! output ss of a node is never higher than the weight of the link.
 
 use super::Pass;
-use crate::compile_graph::{CompileGraph, NodeIdx};
+use crate::compile_graph::{CompileGraph, NodeIdx, NodeType};
 use crate::passes::analysis::ss_range_analysis::SSRangeInfo;
 use crate::passes::AnalysisInfos;
 use crate::{CompilerInput, CompilerOptions};
