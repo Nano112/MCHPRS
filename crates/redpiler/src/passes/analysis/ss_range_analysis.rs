@@ -112,7 +112,7 @@ impl<W: World> Pass<W> for SSRangeAnalysis {
             let node = &graph[node_idx];
             let first_edge = graph.edges_directed(node_idx, Direction::Incoming).next();
             if first_edge.is_none() {
-                let range = Self::range_for_no_inputs(&node.ty, &node.state);
+                let range = Self::range_for_no_inputs(&node.ty, &node.state, node.is_input, node.is_output);
                 range_info.set_range(node_idx, range);
                 Self::propogate_ss_ranges(graph, &mut range_info, node_idx);
             }
@@ -312,7 +312,7 @@ impl SSRangeAnalysis {
         }
     }
 
-    fn range_for_no_inputs(ty: &NodeType, state: &NodeState) -> SSRange {
+    fn range_for_no_inputs(ty: &NodeType, state: &NodeState, is_input: bool, is_output: bool) -> SSRange {
         match ty {
             NodeType::Repeater { .. }
             | NodeType::Comparator { .. }
@@ -322,7 +322,14 @@ impl SSRangeAnalysis {
             | NodeType::Wire
             | NodeType::NoteBlock { .. } => SSRange::constant(0),
             NodeType::Torch => SSRange::constant(15),
-            NodeType::Constant => SSRange::constant(state.output_strength),
+            NodeType::Constant => {
+                // Custom IO Constants (marked as input/output) can have variable power
+                if is_input || is_output {
+                    SSRange::FULL
+                } else {
+                    SSRange::constant(state.output_strength)
+                }
+            },
             NodeType::Button | NodeType::Lever | NodeType::PressurePlate => SSRange::FULL,
         }
     }
