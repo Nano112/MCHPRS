@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 mchprs_blocks = { path = "../blocks" }
-mchprs_world = { path = "../world" }
+mchprs_world = { path = "../world", default-features = false }
 mchprs_redstone = { path = "../redstone" }
 redpiler_graph = { path = "../redpiler_graph" }
 serde_json = { workspace = true }
