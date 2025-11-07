@@ -106,7 +106,7 @@ fn for_pos<W: World>(
     let is_output = matches!(
         ty,
         NodeType::Trapdoor | NodeType::Lamp | NodeType::NoteBlock { .. }
-    ) || matches!(block, Block::RedstoneWire { wire } if wire_dot_out && wire::is_dot(wire))
+    ) || matches!(block, Block::RedstoneWire { wire} if wire_dot_out && wire::is_dot(wire))
     || is_custom_io;
 
     if ignore_wires && ty == NodeType::Wire && !(is_input | is_output) {

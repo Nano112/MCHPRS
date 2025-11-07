@@ -73,27 +73,25 @@ fn compile_node(
     side_inputs.ss_counts[0] += (MAX_INPUTS - side_input_count) as u8;
 
     use crate::compile_graph::NodeType as CNodeType;
-    let updates = if node.ty != CNodeType::Constant {
-        graph
-            .edges_directed(node_idx, Direction::Outgoing)
-            .sorted_by_key(|edge| nodes_map[&edge.target()])
-            .into_group_map_by(|edge| std::mem::discriminant(&graph[edge.target()].ty))
-            .into_values()
-            .flatten()
-            .map(|edge| unsafe {
-                let idx = edge.target();
-                let idx = nodes_map[&idx];
-                assert!(idx < nodes_len);
-                // Safety: bounds checked
-                let target_id = NodeId::from_index(idx);
+    // Note: Constants CAN have outgoing links for custom IO nodes
+    // Regular redstone blocks don't need them, but custom IO Constants do
+    let updates = graph
+        .edges_directed(node_idx, Direction::Outgoing)
+        .sorted_by_key(|edge| nodes_map[&edge.target()])
+        .into_group_map_by(|edge| std::mem::discriminant(&graph[edge.target()].ty))
+        .into_values()
+        .flatten()
+        .map(|edge| unsafe {
+            let idx = edge.target();
+            let idx = nodes_map[&idx];
+            assert!(idx < nodes_len);
+            // Safety: bounds checked
+            let target_id = NodeId::from_index(idx);
 
-                let weight = edge.weight();
-                ForwardLink::new(target_id, weight.ty == LinkType::Side, weight.ss)
-            })
-            .collect()
-    } else {
-        SmallVec::new()
-    };
+            let weight = edge.weight();
+            ForwardLink::new(target_id, weight.ty == LinkType::Side, weight.ss)
+        })
+        .collect();
     stats.update_link_count += updates.len();
 
     let ty = match &node.ty {
