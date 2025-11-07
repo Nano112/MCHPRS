@@ -154,14 +154,18 @@ impl<'a, W: World> InputSearchState<'a, W> {
                 }
             }
         } else if self.provides_weak_power(block, pos, side) {
-            eprintln!("[DEBUG add_edge] FROM {:?} (pos={:?}) TO node {:?}, distance={}", 
-                      self.pos_map.get(&pos), pos, start_node, distance);
             if let Some(&from_node) = self.pos_map.get(&pos) {
-                self.graph.add_edge(
-                    from_node,
-                    start_node,
-                    CompileLink::new(link_ty, distance),
-                );
+                // Don't create self-loops
+                if from_node != start_node {
+                    eprintln!("[DEBUG add_edge] FROM {:?} TO node {:?}, distance={}", from_node, start_node, distance);
+                    self.graph.add_edge(
+                        from_node,
+                        start_node,
+                        CompileLink::new(link_ty, distance),
+                    );
+                } else {
+                    eprintln!("[DEBUG add_edge] Skipping self-loop at {:?}", from_node);
+                }
             } else {
                 eprintln!("[DEBUG add_edge] ERROR: Position {:?} not in pos_map!", pos);
             }
