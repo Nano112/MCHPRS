@@ -33,9 +33,13 @@ pub trait JITBackend {
     fn has_pending_ticks(&self) -> bool;
     /// Inspect block for debugging
     fn inspect(&mut self, pos: BlockPos);
+    /// Set signal strength at a position (for custom inputs)
+    fn set_signal_strength(&mut self, pos: BlockPos, strength: u8);
+    /// Get signal strength at a position (for custom outputs)
+    fn get_signal_strength(&self, pos: BlockPos) -> Option<u8>;
 }
 
-use direct::DirectBackend;
+pub use direct::DirectBackend;
 
 #[enum_dispatch(JITBackend)]
 pub enum BackendDispatcher {

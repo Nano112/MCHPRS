@@ -19,4 +19,4 @@ flate2 = { workspace = true }
 serde = { workspace = true }
 byteorder = { workspace = true }
 tracing = { workspace = true }
-bitvec = { workspace = true }
+bitvec = { version = "1", default-features = false, features = ["alloc"] }

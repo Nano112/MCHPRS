@@ -46,6 +46,7 @@ impl<W: World> Pass<W> for IdentifyNodes {
                 &mut second_pass,
                 ignore_wires,
                 options.wire_dot_out,
+                &options.custom_io,
                 plot,
                 pos,
             );
@@ -72,6 +73,7 @@ fn for_pos<W: World>(
     second_pass: &mut FxHashSet<BlockPos>,
     ignore_wires: bool,
     wire_dot_out: bool,
+    custom_io: &[BlockPos],
     world: &W,
     pos: BlockPos,
 ) {
@@ -87,14 +89,16 @@ fn for_pos<W: World>(
         return;
     };
 
+    let is_custom_io = custom_io.contains(&pos);
     let is_input = matches!(
         ty,
         NodeType::Button | NodeType::Lever | NodeType::PressurePlate
-    );
+    ) || is_custom_io;
     let is_output = matches!(
         ty,
         NodeType::Trapdoor | NodeType::Lamp | NodeType::NoteBlock { .. }
-    ) || matches!(block, Block::RedstoneWire { wire } if wire_dot_out && wire::is_dot(wire));
+    ) || matches!(block, Block::RedstoneWire { wire } if wire_dot_out && wire::is_dot(wire))
+    || is_custom_io;
 
     if ignore_wires && ty == NodeType::Wire && !(is_input | is_output) {
         return;

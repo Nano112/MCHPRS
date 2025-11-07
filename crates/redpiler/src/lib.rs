@@ -1,16 +1,15 @@
-mod backend;
+pub mod backend;
 mod compile_graph;
 mod passes;
 mod ril;
 mod task_monitor;
 
-use backend::{BackendDispatcher, JITBackend};
+pub use backend::{BackendDispatcher, JITBackend};
 use mchprs_blocks::blocks::Block;
 use mchprs_blocks::BlockPos;
 use mchprs_world::{for_each_block_mut_optimized, TickEntry, World};
 use passes::make_default_pass_manager;
 use std::sync::Arc;
-use std::time::Instant;
 use tracing::{debug, error, trace, warn};
 
 pub use task_monitor::TaskMonitor;
@@ -51,6 +50,8 @@ pub struct CompilerOptions {
     pub print_before_backend: bool,
     /// The backend variant to be used after compilation
     pub backend_variant: BackendVariant,
+    /// Custom positions to treat as IO nodes (can inject signals and be monitored)
+    pub custom_io: Vec<BlockPos>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
@@ -133,7 +134,6 @@ impl Compiler {
         monitor: Arc<TaskMonitor>,
     ) {
         debug!("Starting compile");
-        let start = Instant::now();
 
         let input = CompilerInput { world, bounds };
         let pass_manager = make_default_pass_manager::<W>();
@@ -160,19 +160,18 @@ impl Compiler {
         if let Some(jit) = &mut self.jit {
             trace!("Compiling backend");
             monitor.set_message("Compiling backend".to_string());
-            let start = Instant::now();
 
             jit.compile(graph, ticks, &options, monitor.clone());
 
             monitor.inc_progress();
-            trace!("Backend compiled in {:?}", start.elapsed());
+            trace!("Backend compiled");
         } else {
             error!("Cannot compile without JIT variant selected");
         }
 
         self.options = options;
         self.is_active = true;
-        debug!("Compile completed in {:?}", start.elapsed());
+        debug!("Compile completed");
     }
 
     pub fn reset<W: World>(&mut self, world: &mut W, bounds: (BlockPos, BlockPos)) {
@@ -237,6 +236,18 @@ impl Compiler {
     pub fn has_pending_ticks(&mut self) -> bool {
         self.backend().has_pending_ticks()
     }
+
+    pub fn set_signal_strength(&mut self, pos: BlockPos, strength: u8) {
+        self.backend().set_signal_strength(pos, strength);
+    }
+
+    pub fn get_signal_strength(&self, pos: BlockPos) -> Option<u8> {
+        if let Some(backend) = &self.jit {
+            backend.get_signal_strength(pos)
+        } else {
+            None
+        }
+    }
 }
 
 pub struct CompilerInput<'w, W: World> {
@@ -261,6 +272,7 @@ mod tests {
             print_after_all: false,
             print_before_backend: false,
             backend_variant: BackendVariant::default(),
+            custom_io: Vec::new(),
         };
         let options = CompilerOptions::parse(input);
 
