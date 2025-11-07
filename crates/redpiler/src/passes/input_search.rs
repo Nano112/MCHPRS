@@ -83,7 +83,7 @@ impl<'a, W: World> InputSearchState<'a, W> {
         }
     }
 
-    fn provides_strong_power(&self, block: Block, side: BlockFace) -> bool {
+    fn provides_strong_power(&self, block: Block, pos: BlockPos, side: BlockFace) -> bool {
         match block {
             Block::RedstoneTorch { .. } if side == BlockFace::Bottom => true,
             Block::RedstoneWallTorch { .. } if side == BlockFace::Bottom => true,
@@ -120,7 +120,7 @@ impl<'a, W: World> InputSearchState<'a, W> {
             for side in &BlockFace::values() {
                 let pos = pos.offset(*side);
                 let block = self.world.get_block(pos);
-                if self.provides_strong_power(block, *side) {
+                if self.provides_strong_power(block, pos, *side) {
                     self.graph.add_edge(
                         self.pos_map[&pos],
                         start_node,
