@@ -91,12 +91,12 @@ fn for_pos<W: World>(
 
     let is_custom_io = custom_io.contains(&pos);
     
-    // Custom IO wires must act as power sources (like redstone blocks)
-    // Convert them to NodeType::Constant with initial power 0
-    let (ty, state) = if is_custom_io && ty == NodeType::Wire {
-        (NodeType::Constant, NodeState::ss(0))
+    // Custom IO positions (redstone blocks that were wires) should start at power 0
+    // Note: Custom IO wires are replaced with RedstoneBlocks before compilation
+    let state = if is_custom_io && ty == NodeType::Constant {
+        NodeState::ss(0)  // Start at 0 power, will be set via set_signal_strength
     } else {
-        (ty, state)
+        state
     };
     
     let is_input = matches!(
