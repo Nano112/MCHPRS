@@ -254,10 +254,13 @@ impl JITBackend for DirectBackend {
                 continue;
             };
             if node.changed && (!io_only || node.is_io) {
+                eprintln!("[DEBUG flush] pos={:?}, node_type={:?}, block_type={:?}, power={}, is_io={}", 
+                          pos, node.ty, std::mem::discriminant(block), node.output_power, node.is_io);
                 if let Some(powered) = block_powered_mut(block) {
                     *powered = node.powered
                 }
                 if let Block::RedstoneWire { wire, .. } = block {
+                    eprintln!("[DEBUG flush] Syncing wire power: {} -> {}", wire.power, node.output_power);
                     wire.power = node.output_power
                 };
                 if let Block::RedstoneRepeater { repeater } = block {
@@ -285,6 +288,9 @@ impl JITBackend for DirectBackend {
 
     fn set_signal_strength(&mut self, pos: BlockPos, strength: u8) {
         if let Some(&node_id) = self.pos_map.get(&pos) {
+            let node = &self.nodes[node_id];
+            eprintln!("[DEBUG set_signal_strength] pos={:?}, node_id={:?}, node_type={:?}, old_power={}, new_power={}, updates={}", 
+                      pos, node_id, node.ty, node.output_power, strength, node.updates.len());
             // set_node already handles propagation to neighbors via update::update_node
             self.set_node(node_id, strength > 0, strength);
         } else {
