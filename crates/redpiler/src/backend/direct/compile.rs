@@ -75,7 +75,7 @@ fn compile_node(
     use crate::compile_graph::NodeType as CNodeType;
     // Note: Constants CAN have outgoing links for custom IO nodes
     // Regular redstone blocks don't need them, but custom IO Constants do
-    let updates: SmallVec<[ForwardLink; MAX_INPUTS]> = graph
+    let updates: SmallVec<[ForwardLink; 10]> = graph
         .edges_directed(node_idx, Direction::Outgoing)
         .sorted_by_key(|edge| nodes_map[&edge.target()])
         .into_group_map_by(|edge| std::mem::discriminant(&graph[edge.target()].ty))
