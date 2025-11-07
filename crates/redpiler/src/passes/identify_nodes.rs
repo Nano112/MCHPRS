@@ -90,9 +90,18 @@ fn for_pos<W: World>(
     };
 
     let is_custom_io = custom_io.contains(&pos);
+    
+    // Custom IO wires must act as power sources (like redstone blocks)
+    // Convert them to NodeType::Constant with initial power 0
+    let (ty, state) = if is_custom_io && ty == NodeType::Wire {
+        (NodeType::Constant, NodeState::ss(0))
+    } else {
+        (ty, state)
+    };
+    
     let is_input = matches!(
         ty,
-        NodeType::Button | NodeType::Lever | NodeType::PressurePlate
+        NodeType::Button | NodeType::Lever | NodeType::PressurePlate | NodeType::Constant
     ) || is_custom_io;
     let is_output = matches!(
         ty,
