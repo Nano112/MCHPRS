@@ -151,7 +151,9 @@ impl DirectBackend {
 
             // Safety: signal strength is never larger than 15
             unsafe {
-                *inputs.ss_counts.get_unchecked_mut(old_power as usize) -= 1;
+                let old_count = inputs.ss_counts.get_unchecked_mut(old_power as usize);
+                // Prevent underflow for custom IO nodes that may not have properly tracked inputs
+                *old_count = old_count.saturating_sub(1);
                 *inputs.ss_counts.get_unchecked_mut(new_power as usize) += 1;
             }
 
