@@ -21,11 +21,11 @@ impl<W: World> Pass<W> for InputSearch {
     fn run_pass(
         &self,
         graph: &mut CompileGraph,
-        _: &CompilerOptions,
+        options: &CompilerOptions,
         input: &CompilerInput<'_, W>,
         _: &mut AnalysisInfos,
     ) {
-        let mut state = InputSearchState::new(input.world, graph);
+        let mut state = InputSearchState::new(input.world, graph, &options.custom_io);
         state.search();
     }
 
@@ -43,10 +43,11 @@ struct InputSearchState<'a, W: World> {
     world: &'a W,
     graph: &'a mut CompileGraph,
     pos_map: FxHashMap<BlockPos, NodeIdx>,
+    custom_io: &'a [BlockPos],
 }
 
 impl<'a, W: World> InputSearchState<'a, W> {
-    fn new(world: &'a W, graph: &'a mut CompileGraph) -> InputSearchState<'a, W> {
+    fn new(world: &'a W, graph: &'a mut CompileGraph, custom_io: &'a [BlockPos]) -> InputSearchState<'a, W> {
         let mut pos_map = FxHashMap::default();
         for id in graph.node_indices() {
             let (pos, _) = graph[id].block.unwrap();
@@ -57,10 +58,16 @@ impl<'a, W: World> InputSearchState<'a, W> {
             world,
             graph,
             pos_map,
+            custom_io,
         }
     }
 
-    fn provides_weak_power(&self, block: Block, side: BlockFace) -> bool {
+    fn provides_weak_power(&self, block: Block, pos: BlockPos, side: BlockFace) -> bool {
+        // Custom IO wires act as power sources (like redstone blocks)
+        if self.custom_io.contains(&pos) && matches!(block, Block::RedstoneWire { .. }) {
+            return true;
+        }
+        
         match block {
             Block::RedstoneTorch { .. } => true,
             Block::RedstoneWallTorch { facing, .. } if facing.block_face() != side => true,
@@ -91,8 +98,8 @@ impl<'a, W: World> InputSearchState<'a, W> {
                 BlockFace::Bottom => button.face == ButtonFace::Ceiling,
                 _ => button.face == ButtonFace::Wall && button.facing == side.unwrap_direction(),
             },
-            Block::RedstoneRepeater { .. } => self.provides_weak_power(block, side),
-            Block::RedstoneComparator { .. } => self.provides_weak_power(block, side),
+            Block::RedstoneRepeater { .. } => self.provides_weak_power(block, pos, side),
+            Block::RedstoneComparator { .. } => self.provides_weak_power(block, pos, side),
             _ => false,
         }
     }
@@ -145,7 +152,7 @@ impl<'a, W: World> InputSearchState<'a, W> {
                     }
                 }
             }
-        } else if self.provides_weak_power(block, side) {
+        } else if self.provides_weak_power(block, pos, side) {
             self.graph.add_edge(
                 self.pos_map[&pos],
                 start_node,
@@ -260,7 +267,7 @@ impl<'a, W: World> InputSearchState<'a, W> {
         let side_pos = pos.offset(side.block_face());
         let side_block = self.world.get_block(side_pos);
         if mchprs_redstone::is_diode(side_block)
-            && self.provides_weak_power(side_block, side.block_face())
+            && self.provides_weak_power(side_block, side_pos, side.block_face())
         {
             self.graph
                 .add_edge(self.pos_map[&side_pos], id, CompileLink::side(0));
@@ -271,7 +278,7 @@ impl<'a, W: World> InputSearchState<'a, W> {
         let side_pos = pos.offset(side.block_face());
         let side_block = self.world.get_block(side_pos);
         if (mchprs_redstone::is_diode(side_block)
-            && self.provides_weak_power(side_block, side.block_face()))
+            && self.provides_weak_power(side_block, side_pos, side.block_face()))
             || matches!(side_block, Block::RedstoneBlock { .. })
         {
             self.graph
@@ -368,3 +375,4 @@ impl<'a, W: World> InputSearchState<'a, W> {
 fn is_wire(world: &impl World, pos: BlockPos) -> bool {
     matches!(world.get_block(pos), Block::RedstoneWire { .. })
 }
+
