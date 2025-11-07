@@ -307,6 +307,7 @@ impl SSRangeAnalysis {
                 }
             }
             NodeType::Wire => default_range,
+            NodeType::Constant => SSRange::constant(state.output_strength),
             _ => unreachable!("evaluate node ty: {:?}", ty),
         }
     }
