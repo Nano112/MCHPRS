@@ -260,7 +260,9 @@ impl JITBackend for DirectBackend {
                     *powered = node.powered
                 }
                 if let Block::RedstoneWire { ref mut wire, .. } = block {
-                    wire.power = node.output_power
+                    eprintln!("[FLUSH] Wire at {:?}: before={}, setting to={}", pos, wire.power, node.output_power);
+                    wire.power = node.output_power;
+                    eprintln!("[FLUSH] Wire at {:?}: after={}", pos, wire.power);
                 };
                 if let Block::RedstoneRepeater { ref mut repeater } = block {
                     repeater.locked = node.locked;
