@@ -267,7 +267,9 @@ impl JITBackend for DirectBackend {
                 if let Block::RedstoneRepeater { ref mut repeater } = block {
                     repeater.locked = node.locked;
                 }
+                eprintln!("[FLUSH] About to save block at {:?}: {:?}", pos, block);
                 world.set_block(*pos, *block);
+                eprintln!("[FLUSH] After world.set_block, calling get_block: {:?}", world.get_block(*pos));
             }
             // Keep custom IO nodes with override marked as changed
             // so they continue syncing their visual state
