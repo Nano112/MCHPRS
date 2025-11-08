@@ -260,16 +260,12 @@ impl JITBackend for DirectBackend {
                     *powered = node.powered
                 }
                 if let Block::RedstoneWire { ref mut wire, .. } = block {
-                    eprintln!("[FLUSH] Wire at {:?}: before={}, setting to={}", pos, wire.power, node.output_power);
                     wire.power = node.output_power;
-                    eprintln!("[FLUSH] Wire at {:?}: after={}", pos, wire.power);
                 };
                 if let Block::RedstoneRepeater { ref mut repeater } = block {
                     repeater.locked = node.locked;
                 }
-                eprintln!("[FLUSH] About to save block at {:?}: {:?}", pos, block);
                 world.set_block(*pos, *block);
-                eprintln!("[FLUSH] After world.set_block, calling get_block: {:?}", world.get_block(*pos));
             }
             // Keep custom IO nodes with override marked as changed
             // so they continue syncing their visual state
