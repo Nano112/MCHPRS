@@ -259,10 +259,10 @@ impl JITBackend for DirectBackend {
                 if let Some(powered) = block_powered_mut(block) {
                     *powered = node.powered
                 }
-                if let Block::RedstoneWire { wire, .. } = block {
+                if let Block::RedstoneWire { ref mut wire, .. } = block {
                     wire.power = node.output_power
                 };
-                if let Block::RedstoneRepeater { repeater } = block {
+                if let Block::RedstoneRepeater { ref mut repeater } = block {
                     repeater.locked = node.locked;
                 }
                 world.set_block(*pos, *block);
