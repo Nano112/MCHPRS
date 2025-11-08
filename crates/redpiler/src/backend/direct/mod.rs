@@ -267,7 +267,11 @@ impl JITBackend for DirectBackend {
                 }
                 world.set_block(*pos, *block);
             }
-            node.changed = false;
+            // Keep custom IO nodes with override marked as changed
+            // so they continue syncing their visual state
+            if !(node.is_io && node.custom_io_override) {
+                node.changed = false;
+            }
         }
     }
 
