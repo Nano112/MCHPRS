@@ -125,7 +125,7 @@ impl DirectBackend {
         let node = &mut self.nodes[node_id];
         let old_power = node.output_power;
         
-        if let Some((pos, _)) = &self.blocks[node_id.get_index()] {
+        if let Some((pos, _)) = &self.blocks[node_id.index()] {
             eprintln!("[SET_NODE DEBUG] Node at {:?}: power {} -> {}, has {} outgoing links", 
                 pos, old_power, new_power, node.updates.len());
         }
