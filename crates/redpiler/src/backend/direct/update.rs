@@ -1,4 +1,5 @@
 use mchprs_world::TickPriority;
+use rustc_hash::FxHashMap;
 
 use super::node::{NodeId, NodeType};
 use super::*;
@@ -9,6 +10,8 @@ pub(super) fn update_node(
     events: &mut Vec<Event>,
     nodes: &mut Nodes,
     node_id: NodeId,
+    blocks: &[(Option<(BlockPos, Block)>)],
+    pos_map: &FxHashMap<BlockPos, NodeId>,
 ) {
     let node = &mut nodes[node_id];
 
@@ -97,6 +100,21 @@ pub(super) fn update_node(
             if node.output_power != input_power {
                 node.output_power = input_power;
                 node.changed = true;
+                
+                // Propagate power change to adjacent wires
+                if let Some((pos, _)) = &blocks[node_id.index()] {
+                    let pos = *pos;
+                    for face in &mchprs_blocks::BlockFace::values() {
+                        let adj_pos = pos.offset(*face);
+                        if let Some(&adj_node_id) = pos_map.get(&adj_pos) {
+                            let adj_node = &nodes[adj_node_id];
+                            // Only schedule other wires (not custom IO with override)
+                            if matches!(adj_node.ty, NodeType::Wire) && !(adj_node.is_io && adj_node.custom_io_override) {
+                                scheduler.schedule_tick(adj_node_id, 0, TickPriority::High);
+                            }
+                        }
+                    }
+                }
             }
         }
         NodeType::NoteBlock { noteblock_id } => {

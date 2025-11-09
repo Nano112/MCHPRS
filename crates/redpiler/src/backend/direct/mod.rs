@@ -162,6 +162,8 @@ impl DirectBackend {
                 &mut self.events,
                 &mut self.nodes,
                 update,
+                &self.blocks,
+                &self.pos_map,
             );
         }
         
