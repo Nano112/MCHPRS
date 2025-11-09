@@ -226,8 +226,17 @@ impl<'a, W: World> InputSearchState<'a, W> {
                 );
 
                 if is_wire(self.world, neighbor_pos) && !discovered.contains_key(&neighbor_pos) {
+                    eprintln!("[SEARCH_WIRE] Found adjacent wire at {:?}, adding to queue", neighbor_pos);
                     queue.push_back(neighbor_pos);
                     discovered.insert(neighbor_pos, discovered[&pos] + 1);
+                } else if side.is_horizontal() {
+                    let is_wire_result = is_wire(self.world, neighbor_pos);
+                    let is_discovered = discovered.contains_key(&neighbor_pos);
+                    if !is_wire_result {
+                        eprintln!("[SEARCH_WIRE] Neighbor at {:?} is NOT a wire", neighbor_pos);
+                    } else if is_discovered {
+                        eprintln!("[SEARCH_WIRE] Neighbor at {:?} already discovered", neighbor_pos);
+                    }
                 }
 
                 if side.is_horizontal() {
