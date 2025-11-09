@@ -251,6 +251,8 @@ impl JITBackend for DirectBackend {
                 }
             }
         }
+        eprintln!("[FLUSH DEBUG] Starting flush with io_only={}", io_only);
+        let mut synced_count = 0;
         for (i, node) in self.nodes.inner_mut().iter_mut().enumerate() {
             let Some((pos, block)) = &mut self.blocks[i] else {
                 continue;
@@ -260,7 +262,9 @@ impl JITBackend for DirectBackend {
                     *powered = node.powered
                 }
                 if let Block::RedstoneWire { ref mut wire, .. } = block {
+                    eprintln!("[FLUSH DEBUG] Syncing wire at {:?}: power {} -> {}", pos, wire.power, node.output_power);
                     wire.power = node.output_power;
+                    synced_count += 1;
                 };
                 if let Block::RedstoneRepeater { ref mut repeater } = block {
                     repeater.locked = node.locked;
@@ -273,6 +277,7 @@ impl JITBackend for DirectBackend {
                 node.changed = false;
             }
         }
+        eprintln!("[FLUSH DEBUG] Flush complete. Synced {} wires", synced_count);
     }
 
     fn compile(
