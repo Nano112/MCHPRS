@@ -94,7 +94,6 @@ fn for_pos<W: World>(
     // Custom IO wires need to act as power sources (like redstone blocks) to propagate power
     // Convert Wire nodes to Constant nodes for custom IO positions
     let (ty, state) = if is_custom_io && ty == NodeType::Wire {
-        eprintln!("[IDENTIFY_NODES] Converting custom IO wire at {:?} to Constant node", pos);
         (NodeType::Constant, NodeState::ss(0)) // Initial power 0, will be set via set_signal_strength
     } else {
         (ty, state)

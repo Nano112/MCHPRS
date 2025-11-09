@@ -124,11 +124,6 @@ impl DirectBackend {
     fn set_node(&mut self, node_id: NodeId, powered: bool, new_power: u8) {
         let node = &mut self.nodes[node_id];
         let old_power = node.output_power;
-        
-        if let Some((pos, _)) = &self.blocks[node_id.index()] {
-            eprintln!("[SET_NODE DEBUG] Node at {:?}: power {} -> {}, has {} outgoing links", 
-                pos, old_power, new_power, node.updates.len());
-        }
 
         node.changed = true;
         node.powered = powered;
@@ -176,13 +171,10 @@ impl DirectBackend {
         if node.is_io {
             if let Some((pos, _)) = &self.blocks[node_id.index()] {
                 let pos = *pos;
-                eprintln!("[SET_NODE DEBUG] Custom IO node at {:?}, manually scheduling adjacent nodes", pos);
-                
                 // Check all 6 adjacent positions
                 for face in &mchprs_blocks::BlockFace::values() {
                     let adj_pos = pos.offset(*face);
                     if let Some(&adj_node_id) = self.pos_map.get(&adj_pos) {
-                        eprintln!("[SET_NODE DEBUG] Scheduling adjacent node at {:?}", adj_pos);
                         self.schedule_tick(adj_node_id, 0, TickPriority::High);
                     }
                 }
@@ -275,8 +267,6 @@ impl JITBackend for DirectBackend {
                 }
             }
         }
-        eprintln!("[FLUSH DEBUG] Starting flush with io_only={}", io_only);
-        let mut synced_count = 0;
         for (i, node) in self.nodes.inner_mut().iter_mut().enumerate() {
             let Some((pos, block)) = &mut self.blocks[i] else {
                 continue;
@@ -286,9 +276,7 @@ impl JITBackend for DirectBackend {
                     *powered = node.powered
                 }
                 if let Block::RedstoneWire { ref mut wire, .. } = block {
-                    eprintln!("[FLUSH DEBUG] Syncing wire at {:?}: power {} -> {}", pos, wire.power, node.output_power);
                     wire.power = node.output_power;
-                    synced_count += 1;
                 };
                 if let Block::RedstoneRepeater { ref mut repeater } = block {
                     repeater.locked = node.locked;
@@ -301,7 +289,6 @@ impl JITBackend for DirectBackend {
                 node.changed = false;
             }
         }
-        eprintln!("[FLUSH DEBUG] Flush complete. Synced {} wires", synced_count);
     }
 
     fn compile(
@@ -319,22 +306,17 @@ impl JITBackend for DirectBackend {
     }
 
     fn set_signal_strength(&mut self, pos: BlockPos, strength: u8) {
-        eprintln!("[SET_SIGNAL_STRENGTH] Called for pos {:?}, strength {}", pos, strength);
         if let Some(&node_id) = self.pos_map.get(&pos) {
-            eprintln!("[SET_SIGNAL_STRENGTH] Found node_id {:?}", node_id);
             let node = &mut self.nodes[node_id];
             
             // Mark that this custom IO node has manually overridden power
             // This prevents automatic recalculation from inputs
             if node.is_io {
                 node.custom_io_override = true;
-                eprintln!("[SET_SIGNAL_STRENGTH] Marked as custom_io_override");
             }
             
             // set_node handles propagation to neighbors
-            eprintln!("[SET_SIGNAL_STRENGTH] Calling set_node...");
             self.set_node(node_id, strength > 0, strength);
-            eprintln!("[SET_SIGNAL_STRENGTH] set_node completed");
         } else {
             warn!("Tried to set signal strength at position {} which is not a redpiler node", pos);
         }

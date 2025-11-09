@@ -166,7 +166,6 @@ impl<'a, W: World> InputSearchState<'a, W> {
             }
         
         } else if let Block::RedstoneWire { wire } = block {
-            eprintln!("[GET_REDSTONE_LINKS] Found wire at {:?}, checking if it connects...", pos);
             match side {
                 BlockFace::Top => self.search_wire(start_node, pos, link_ty, distance),
                 BlockFace::Bottom => {}
@@ -179,10 +178,7 @@ impl<'a, W: World> InputSearchState<'a, W> {
                         )
                         .is_none()
                     {
-                        eprintln!("[GET_REDSTONE_LINKS] Wire at {:?} connects, calling search_wire", pos);
                         self.search_wire(start_node, pos, link_ty, distance);
-                    } else {
-                        eprintln!("[GET_REDSTONE_LINKS] Wire at {:?} does NOT connect (search_wire={}, side check failed)", pos, search_wire);
                     }
                 }
             }
@@ -196,7 +192,6 @@ impl<'a, W: World> InputSearchState<'a, W> {
         link_ty: LinkType,
         mut distance: u8,
     ) {
-        eprintln!("[SEARCH_WIRE] Starting search from {:?} for node {:?}", root_pos, start_node);
         let mut queue: VecDeque<BlockPos> = VecDeque::new();
         let mut discovered = FxHashMap::default();
 
@@ -232,17 +227,8 @@ impl<'a, W: World> InputSearchState<'a, W> {
                 );
 
                 if is_wire(self.world, neighbor_pos) && !discovered.contains_key(&neighbor_pos) {
-                    eprintln!("[SEARCH_WIRE] Found adjacent wire at {:?}, adding to queue", neighbor_pos);
                     queue.push_back(neighbor_pos);
                     discovered.insert(neighbor_pos, discovered[&pos] + 1);
-                } else if side.is_horizontal() {
-                    let is_wire_result = is_wire(self.world, neighbor_pos);
-                    let is_discovered = discovered.contains_key(&neighbor_pos);
-                    if !is_wire_result {
-                        eprintln!("[SEARCH_WIRE] Neighbor at {:?} is NOT a wire", neighbor_pos);
-                    } else if is_discovered {
-                        eprintln!("[SEARCH_WIRE] Neighbor at {:?} already discovered", neighbor_pos);
-                    }
                 }
 
                 if side.is_horizontal() {
@@ -360,9 +346,7 @@ impl<'a, W: World> InputSearchState<'a, W> {
                 self.search_repeater_side(id, pos, facing.rotate_ccw());
             }
             Block::RedstoneWire { .. } => {
-                eprintln!("[INPUT_SEARCH] Wire at {:?} calling search_wire", pos);
                 self.search_wire(id, pos, LinkType::Default, 0);
-                eprintln!("[INPUT_SEARCH] Wire at {:?} search_wire completed", pos);
             }
             Block::RedstoneLamp { .. } | Block::IronTrapdoor { .. } | Block::NoteBlock { .. } => {
                 for face in &BlockFace::values() {
