@@ -164,6 +164,7 @@ impl<'a, W: World> InputSearchState<'a, W> {
             }
         
         } else if let Block::RedstoneWire { wire } = block {
+            eprintln!("[GET_REDSTONE_LINKS] Found wire at {:?}, checking if it connects...", pos);
             match side {
                 BlockFace::Top => self.search_wire(start_node, pos, link_ty, distance),
                 BlockFace::Bottom => {}
@@ -176,7 +177,10 @@ impl<'a, W: World> InputSearchState<'a, W> {
                         )
                         .is_none()
                     {
+                        eprintln!("[GET_REDSTONE_LINKS] Wire at {:?} connects, calling search_wire", pos);
                         self.search_wire(start_node, pos, link_ty, distance);
+                    } else {
+                        eprintln!("[GET_REDSTONE_LINKS] Wire at {:?} does NOT connect (search_wire={}, side check failed)", pos, search_wire);
                     }
                 }
             }
