@@ -347,6 +347,23 @@ impl<'a, W: World> InputSearchState<'a, W> {
             }
             Block::RedstoneWire { .. } => {
                 self.search_wire(id, pos, LinkType::Default, 0);
+                
+                // Custom IO wires also need outgoing edges to power adjacent nodes
+                if self.custom_io.contains(&pos) {
+                    for face in &BlockFace::values() {
+                        let neighbor_pos = pos.offset(*face);
+                        let neighbor_block = self.world.get_block(neighbor_pos);
+                        // Create edges FROM custom IO wire TO neighbors that can receive power
+                        if let Block::RedstoneWire { .. } = neighbor_block {
+                            if let Some(&neighbor_id) = self.pos_map.get(&neighbor_pos) {
+                                // Don't create self-loops
+                                if neighbor_id != id {
+                                    self.graph.add_edge(id, neighbor_id, CompileLink::default(0));
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Block::RedstoneLamp { .. } | Block::IronTrapdoor { .. } | Block::NoteBlock { .. } => {
                 for face in &BlockFace::values() {

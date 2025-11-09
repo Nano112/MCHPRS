@@ -1,5 +1,4 @@
 use mchprs_world::TickPriority;
-use rustc_hash::FxHashMap;
 
 use super::node::{NodeId, NodeType};
 use super::*;
@@ -10,8 +9,6 @@ pub(super) fn update_node(
     events: &mut Vec<Event>,
     nodes: &mut Nodes,
     node_id: NodeId,
-    blocks: &[(Option<(BlockPos, Block)>)],
-    pos_map: &FxHashMap<BlockPos, NodeId>,
 ) {
     let node = &mut nodes[node_id];
 
