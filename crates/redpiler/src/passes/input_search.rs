@@ -63,9 +63,11 @@ impl<'a, W: World> InputSearchState<'a, W> {
     }
 
     fn provides_weak_power(&self, block: Block, pos: BlockPos, side: BlockFace) -> bool {
-        // Note: Custom IO wires should NOT be treated as power sources here.
-        // They are regular wires that have externally set power via set_signal_strength.
-        // Treating them as power sources prevents them from creating edges to neighbors.
+        // Custom IO wires (converted to Constant nodes) act as power sources
+        // They have NodeType::Constant but BlockType::RedstoneWire
+        if self.custom_io.contains(&pos) && matches!(block, Block::RedstoneWire { .. }) {
+            return true;
+        }
         
         match block {
             Block::RedstoneTorch { .. } => true,
