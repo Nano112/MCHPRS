@@ -300,17 +300,22 @@ impl JITBackend for DirectBackend {
     }
 
     fn set_signal_strength(&mut self, pos: BlockPos, strength: u8) {
+        eprintln!("[SET_SIGNAL_STRENGTH] Called for pos {:?}, strength {}", pos, strength);
         if let Some(&node_id) = self.pos_map.get(&pos) {
+            eprintln!("[SET_SIGNAL_STRENGTH] Found node_id {:?}", node_id);
             let node = &mut self.nodes[node_id];
             
             // Mark that this custom IO node has manually overridden power
             // This prevents automatic recalculation from inputs
             if node.is_io {
                 node.custom_io_override = true;
+                eprintln!("[SET_SIGNAL_STRENGTH] Marked as custom_io_override");
             }
             
             // set_node handles propagation to neighbors
+            eprintln!("[SET_SIGNAL_STRENGTH] Calling set_node...");
             self.set_node(node_id, strength > 0, strength);
+            eprintln!("[SET_SIGNAL_STRENGTH] set_node completed");
         } else {
             warn!("Tried to set signal strength at position {} which is not a redpiler node", pos);
         }
