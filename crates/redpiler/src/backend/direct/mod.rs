@@ -169,6 +169,25 @@ impl DirectBackend {
                 update,
             );
         }
+        
+        // Special handling for custom IO nodes: manually update adjacent nodes
+        // since custom IO Constant nodes don't have outgoing edges from compilation
+        let node = &self.nodes[node_id];
+        if node.is_io {
+            if let Some((pos, _)) = &self.blocks[node_id.index()] {
+                let pos = *pos;
+                eprintln!("[SET_NODE DEBUG] Custom IO node at {:?}, manually scheduling adjacent nodes", pos);
+                
+                // Check all 6 adjacent positions
+                for face in &mchprs_blocks::BlockFace::values() {
+                    let adj_pos = pos.offset(*face);
+                    if let Some(&adj_node_id) = self.pos_map.get(&adj_pos) {
+                        eprintln!("[SET_NODE DEBUG] Scheduling adjacent node at {:?}", adj_pos);
+                        self.schedule_tick(adj_node_id, 0, TickPriority::High);
+                    }
+                }
+            }
+        }
     }
 }
 
