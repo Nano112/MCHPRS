@@ -190,6 +190,7 @@ impl<'a, W: World> InputSearchState<'a, W> {
         link_ty: LinkType,
         mut distance: u8,
     ) {
+        eprintln!("[SEARCH_WIRE] Starting search from {:?} for node {:?}", root_pos, start_node);
         let mut queue: VecDeque<BlockPos> = VecDeque::new();
         let mut discovered = FxHashMap::default();
 
@@ -344,7 +345,9 @@ impl<'a, W: World> InputSearchState<'a, W> {
                 self.search_repeater_side(id, pos, facing.rotate_ccw());
             }
             Block::RedstoneWire { .. } => {
+                eprintln!("[INPUT_SEARCH] Wire at {:?} calling search_wire", pos);
                 self.search_wire(id, pos, LinkType::Default, 0);
+                eprintln!("[INPUT_SEARCH] Wire at {:?} search_wire completed", pos);
             }
             Block::RedstoneLamp { .. } | Block::IronTrapdoor { .. } | Block::NoteBlock { .. } => {
                 for face in &BlockFace::values() {
