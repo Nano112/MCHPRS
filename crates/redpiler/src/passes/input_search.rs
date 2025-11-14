@@ -258,7 +258,6 @@ impl<'a, W: World> InputSearchState<'a, W> {
     /// Create output edges from a custom IO wire to all connected wires and components
     /// This allows custom IO wires to act as power sources when set via set_signal_strength()
     fn create_wire_output_edges(&mut self, wire_node: NodeIdx, wire_pos: BlockPos) {
-        eprintln!("Creating output edges for custom IO wire at {:?}", wire_pos);
         // Do a BFS to find all connected wires and components
         let mut queue: VecDeque<BlockPos> = VecDeque::new();
         let mut discovered = FxHashMap::default();
@@ -285,7 +284,6 @@ impl<'a, W: World> InputSearchState<'a, W> {
                 if is_wire(self.world, neighbor_pos) {
                     if let Some(&neighbor_node) = self.pos_map.get(&neighbor_pos) {
                         if !discovered.contains_key(&neighbor_pos) {
-                            eprintln!("  Adding edge from {:?} to wire at {:?} (distance {})", wire_pos, neighbor_pos, distance + 1);
                             self.graph.add_edge(
                                 wire_node,
                                 neighbor_node,
