@@ -23,6 +23,58 @@ use tracing::warn;
 
 pub struct IdentifyNodes;
 
+/// Find all wires that are connected to custom IO wires
+/// This is needed when optimization is enabled to ensure custom IO wires can propagate power
+fn find_wires_connected_to_custom_io<W: World>(
+    world: &W,
+    custom_io: &[BlockPos],
+    bounds: (BlockPos, BlockPos),
+) -> FxHashSet<BlockPos> {
+    use std::collections::VecDeque;
+    
+    let mut connected_wires = FxHashSet::default();
+    
+    for &custom_io_pos in custom_io {
+        // Only process if this custom IO position is actually a wire
+        if !matches!(world.get_block(custom_io_pos), Block::RedstoneWire { .. }) {
+            continue;
+        }
+        
+        // BFS to find all connected wires
+        let mut queue = VecDeque::new();
+        queue.push_back(custom_io_pos);
+        connected_wires.insert(custom_io_pos);
+        
+        while let Some(pos) = queue.pop_front() {
+            // Check all 6 directions for adjacent wires
+            for face in &BlockFace::values() {
+                let neighbor_pos = pos.offset(*face);
+                
+                // Skip if out of bounds
+                if neighbor_pos.x < bounds.0.x || neighbor_pos.x > bounds.1.x
+                    || neighbor_pos.y < bounds.0.y || neighbor_pos.y > bounds.1.y
+                    || neighbor_pos.z < bounds.0.z || neighbor_pos.z > bounds.1.z
+                {
+                    continue;
+                }
+                
+                // Skip if already visited
+                if connected_wires.contains(&neighbor_pos) {
+                    continue;
+                }
+                
+                // Check if it's a wire
+                if matches!(world.get_block(neighbor_pos), Block::RedstoneWire { .. }) {
+                    connected_wires.insert(neighbor_pos);
+                    queue.push_back(neighbor_pos);
+                }
+            }
+        }
+    }
+    
+    connected_wires
+}
+
 impl<W: World> Pass<W> for IdentifyNodes {
     fn run_pass(
         &self,
@@ -38,6 +90,13 @@ impl<W: World> Pass<W> for IdentifyNodes {
         let mut second_pass = FxHashSet::default();
 
         let (first_pos, second_pos) = input.bounds;
+        
+        // Find all wires connected to custom IO wires
+        let wires_connected_to_custom_io = if ignore_wires && !options.custom_io.is_empty() {
+            find_wires_connected_to_custom_io(plot, &options.custom_io, (first_pos, second_pos))
+        } else {
+            FxHashSet::default()
+        };
 
         for_each_block_optimized(plot, first_pos, second_pos, |pos| {
             for_pos(
@@ -47,6 +106,7 @@ impl<W: World> Pass<W> for IdentifyNodes {
                 ignore_wires,
                 options.wire_dot_out,
                 &options.custom_io,
+                &wires_connected_to_custom_io,
                 plot,
                 pos,
             );
@@ -74,6 +134,7 @@ fn for_pos<W: World>(
     ignore_wires: bool,
     wire_dot_out: bool,
     custom_io: &[BlockPos],
+    wires_connected_to_custom_io: &FxHashSet<BlockPos>,
     world: &W,
     pos: BlockPos,
 ) {
@@ -91,30 +152,22 @@ fn for_pos<W: World>(
 
     let is_custom_io = custom_io.contains(&pos);
     
-    // Check if this wire is adjacent to a custom IO wire
+    // Check if this wire is connected to a custom IO wire
     // These wires need to be included in the graph even with optimization enabled
-    // so that custom IO wires can propagate power to them
-    let is_adjacent_to_custom_io = if ty == NodeType::Wire && !is_custom_io {
-        use mchprs_blocks::BlockFace;
-        BlockFace::values().iter().any(|face| {
-            let neighbor_pos = pos.offset(*face);
-            custom_io.contains(&neighbor_pos) && matches!(world.get_block(neighbor_pos), Block::RedstoneWire { .. })
-        })
-    } else {
-        false
-    };
+    // so that custom IO wires can propagate power through them
+    let is_connected_to_custom_io = ty == NodeType::Wire && wires_connected_to_custom_io.contains(&pos);
     
     // Custom IO: Keep original node type (Wire/Repeater/Comparator/etc) but mark as input/output
     // This allows ANY component to be monitored or controlled via custom IO
     let is_input = matches!(
         ty,
         NodeType::Button | NodeType::Lever | NodeType::PressurePlate
-    ) || is_custom_io || is_adjacent_to_custom_io;
+    ) || is_custom_io || is_connected_to_custom_io;
     let is_output = matches!(
         ty,
         NodeType::Trapdoor | NodeType::Lamp | NodeType::NoteBlock { .. }
     ) || matches!(block, Block::RedstoneWire { wire} if wire_dot_out && wire::is_dot(wire))
-    || is_custom_io || is_adjacent_to_custom_io;
+    || is_custom_io || is_connected_to_custom_io;
 
     if ignore_wires && ty == NodeType::Wire && !(is_input | is_output) {
         return;
