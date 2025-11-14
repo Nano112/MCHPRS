@@ -128,6 +128,7 @@ impl DirectBackend {
         node.changed = true;
         node.powered = powered;
         node.output_power = new_power;
+        
         for i in 0..node.updates.len() {
             let node = &self.nodes[node_id];
             let update_link = unsafe { *node.updates.get_unchecked(i) };
@@ -142,19 +143,19 @@ impl DirectBackend {
                 &mut update_ref.default_inputs
             };
 
-            let old_power = old_power.saturating_sub(distance);
-            let new_power = new_power.saturating_sub(distance);
+            let old_power_at_neighbor = old_power.saturating_sub(distance);
+            let new_power_at_neighbor = new_power.saturating_sub(distance);
 
-            if old_power == new_power {
+            if old_power_at_neighbor == new_power_at_neighbor {
                 continue;
             }
 
             // Safety: signal strength is never larger than 15
             unsafe {
-                let old_count = inputs.ss_counts.get_unchecked_mut(old_power as usize);
+                let old_count = inputs.ss_counts.get_unchecked_mut(old_power_at_neighbor as usize);
                 // Prevent underflow for custom IO nodes that may not have properly tracked inputs
                 *old_count = old_count.saturating_sub(1);
-                *inputs.ss_counts.get_unchecked_mut(new_power as usize) += 1;
+                *inputs.ss_counts.get_unchecked_mut(new_power_at_neighbor as usize) += 1;
             }
 
             update::update_node(

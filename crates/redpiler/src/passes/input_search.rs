@@ -63,11 +63,10 @@ impl<'a, W: World> InputSearchState<'a, W> {
     }
 
     fn provides_weak_power(&self, block: Block, pos: BlockPos, side: BlockFace) -> bool {
-        // Custom IO wires (converted to Constant nodes) act as power sources
-        // They have NodeType::Constant but BlockType::RedstoneWire
-        if self.custom_io.contains(&pos) && matches!(block, Block::RedstoneWire { .. }) {
-            return true;
-        }
+        // Custom IO wires do NOT provide weak power by default
+        // They only act as sources when explicitly set via set_signal_strength() at runtime
+        // (which sets custom_io_override flag)
+        // This allows them to be transparent monitoring points that don't interfere with normal propagation
         
         match block {
             Block::RedstoneTorch { .. } => true,
@@ -256,6 +255,158 @@ impl<'a, W: World> InputSearchState<'a, W> {
         }
     }
 
+    /// Create output edges from a custom IO wire to all connected wires and components
+    /// This allows custom IO wires to act as power sources when set via set_signal_strength()
+    fn create_wire_output_edges(&mut self, wire_node: NodeIdx, wire_pos: BlockPos) {
+        // Do a BFS to find all connected wires and components
+        let mut queue: VecDeque<BlockPos> = VecDeque::new();
+        let mut discovered = FxHashMap::default();
+
+        discovered.insert(wire_pos, 0u8);
+        queue.push_back(wire_pos);
+
+        while let Some(pos) = queue.pop_front() {
+            let distance = discovered[&pos];
+
+            // Stop at max wire distance
+            if distance > 15 {
+                continue;
+            }
+
+            let up_pos = pos.offset(BlockFace::Top);
+            let up_block = self.world.get_block(up_pos);
+
+            for side in &BlockFace::values() {
+                let neighbor_pos = pos.offset(*side);
+                let neighbor = self.world.get_block(neighbor_pos);
+
+                // Add edge to neighboring wire if it exists in the graph
+                if is_wire(self.world, neighbor_pos) {
+                    if let Some(&neighbor_node) = self.pos_map.get(&neighbor_pos) {
+                        if !discovered.contains_key(&neighbor_pos) {
+                            self.graph.add_edge(
+                                wire_node,
+                                neighbor_node,
+                                CompileLink::new(LinkType::Default, distance + 1),
+                            );
+                            queue.push_back(neighbor_pos);
+                            discovered.insert(neighbor_pos, distance + 1);
+                        }
+                    }
+                }
+
+                // Add edges to components that can be powered by wires
+                if let Some(&neighbor_node) = self.pos_map.get(&neighbor_pos) {
+                    // Components that receive power from adjacent wires
+                    match neighbor {
+                        Block::RedstoneLamp { .. } | Block::IronTrapdoor { .. } | Block::NoteBlock { .. } => {
+                            self.graph.add_edge(
+                                wire_node,
+                                neighbor_node,
+                                CompileLink::new(LinkType::Default, distance),
+                            );
+                        }
+                        Block::RedstoneTorch { .. } if *side == BlockFace::Top => {
+                            // Torch on top of block above wire
+                            self.graph.add_edge(
+                                wire_node,
+                                neighbor_node,
+                                CompileLink::new(LinkType::Default, distance),
+                            );
+                        }
+                        Block::RedstoneRepeater { repeater } if repeater.facing.opposite().block_face() == *side => {
+                            // Repeater facing the wire
+                            self.graph.add_edge(
+                                wire_node,
+                                neighbor_node,
+                                CompileLink::new(LinkType::Default, distance),
+                            );
+                        }
+                        Block::RedstoneComparator { comparator } if comparator.facing.opposite().block_face() == *side => {
+                            // Comparator facing the wire
+                            self.graph.add_edge(
+                                wire_node,
+                                neighbor_node,
+                                CompileLink::new(LinkType::Default, distance),
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Wires also power solid blocks, which can then power components on top/around them
+                if neighbor.is_solid() {
+                    // Check all faces of the solid block for components that can be powered
+                    for block_side in &BlockFace::values() {
+                        let component_pos = neighbor_pos.offset(*block_side);
+                        if let Some(&component_node) = self.pos_map.get(&component_pos) {
+                            let component_block = self.world.get_block(component_pos);
+                            match component_block {
+                                Block::RedstoneTorch { .. } if *block_side == BlockFace::Top => {
+                                    // Torch on top of the solid block
+                                    self.graph.add_edge(
+                                        wire_node,
+                                        component_node,
+                                        CompileLink::new(LinkType::Default, distance),
+                                    );
+                                }
+                                Block::RedstoneWallTorch { facing, .. } if facing.opposite().block_face() == *block_side => {
+                                    // Wall torch on side of the solid block
+                                    self.graph.add_edge(
+                                        wire_node,
+                                        component_node,
+                                        CompileLink::new(LinkType::Default, distance),
+                                    );
+                                }
+                                Block::RedstoneLamp { .. } | Block::IronTrapdoor { .. } | Block::NoteBlock { .. } => {
+                                    self.graph.add_edge(
+                                        wire_node,
+                                        component_node,
+                                        CompileLink::new(LinkType::Default, distance),
+                                    );
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+
+                // Handle diagonal wire connections
+                if side.is_horizontal() {
+                    if !up_block.is_solid() && !neighbor.is_transparent() {
+                        let neighbor_up_pos = neighbor_pos.offset(BlockFace::Top);
+                        if is_wire(self.world, neighbor_up_pos) && !discovered.contains_key(&neighbor_up_pos) {
+                            if let Some(&neighbor_node) = self.pos_map.get(&neighbor_up_pos) {
+                                self.graph.add_edge(
+                                    wire_node,
+                                    neighbor_node,
+                                    CompileLink::new(LinkType::Default, distance + 1),
+                                );
+                                queue.push_back(neighbor_up_pos);
+                                discovered.insert(neighbor_up_pos, distance + 1);
+                            }
+                        }
+                    }
+
+                    if !neighbor.is_solid() {
+                        let neighbor_down_pos = neighbor_pos.offset(BlockFace::Bottom);
+                        if is_wire(self.world, neighbor_down_pos) && !discovered.contains_key(&neighbor_down_pos) {
+                            if let Some(&neighbor_node) = self.pos_map.get(&neighbor_down_pos) {
+                                self.graph.add_edge(
+                                    wire_node,
+                                    neighbor_node,
+                                    CompileLink::new(LinkType::Default, distance + 1),
+                                );
+                                queue.push_back(neighbor_down_pos);
+                                discovered.insert(neighbor_down_pos, distance + 1);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn search_diode_inputs(&mut self, id: NodeIdx, pos: BlockPos, facing: BlockDirection) {
         let input_pos = pos.offset(facing.block_face());
         let input_block = self.world.get_block(input_pos);
@@ -346,23 +497,16 @@ impl<'a, W: World> InputSearchState<'a, W> {
                 self.search_repeater_side(id, pos, facing.rotate_ccw());
             }
             Block::RedstoneWire { .. } => {
+                // Custom IO wires are treated as normal wires
+                // They participate in normal wire propagation via search_wire()
+                // When set_signal_strength() is called at runtime, custom_io_override flag
+                // prevents recalculation, making them act as sources
+                let is_custom_io = self.custom_io.contains(&pos);
                 self.search_wire(id, pos, LinkType::Default, 0);
                 
-                // Custom IO wires also need outgoing edges to power adjacent nodes
-                if self.custom_io.contains(&pos) {
-                    for face in &BlockFace::values() {
-                        let neighbor_pos = pos.offset(*face);
-                        let neighbor_block = self.world.get_block(neighbor_pos);
-                        // Create edges FROM custom IO wire TO neighbors that can receive power
-                        if let Block::RedstoneWire { .. } = neighbor_block {
-                            if let Some(&neighbor_id) = self.pos_map.get(&neighbor_pos) {
-                                // Don't create self-loops
-                                if neighbor_id != id {
-                                    self.graph.add_edge(id, neighbor_id, CompileLink::default(0));
-                                }
-                            }
-                        }
-                    }
+                // Custom IO wires need output edges to propagate power when set via set_signal_strength()
+                if is_custom_io {
+                    self.create_wire_output_edges(id, pos);
                 }
             }
             Block::RedstoneLamp { .. } | Block::IronTrapdoor { .. } | Block::NoteBlock { .. } => {
