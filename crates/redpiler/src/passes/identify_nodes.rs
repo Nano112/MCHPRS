@@ -91,17 +91,30 @@ fn for_pos<W: World>(
 
     let is_custom_io = custom_io.contains(&pos);
     
+    // Check if this wire is adjacent to a custom IO wire
+    // These wires need to be included in the graph even with optimization enabled
+    // so that custom IO wires can propagate power to them
+    let is_adjacent_to_custom_io = if ty == NodeType::Wire && !is_custom_io {
+        use mchprs_blocks::BlockFace;
+        BlockFace::values().iter().any(|face| {
+            let neighbor_pos = pos.offset(*face);
+            custom_io.contains(&neighbor_pos) && matches!(world.get_block(neighbor_pos), Block::RedstoneWire { .. })
+        })
+    } else {
+        false
+    };
+    
     // Custom IO: Keep original node type (Wire/Repeater/Comparator/etc) but mark as input/output
     // This allows ANY component to be monitored or controlled via custom IO
     let is_input = matches!(
         ty,
         NodeType::Button | NodeType::Lever | NodeType::PressurePlate
-    ) || is_custom_io;
+    ) || is_custom_io || is_adjacent_to_custom_io;
     let is_output = matches!(
         ty,
         NodeType::Trapdoor | NodeType::Lamp | NodeType::NoteBlock { .. }
     ) || matches!(block, Block::RedstoneWire { wire} if wire_dot_out && wire::is_dot(wire))
-    || is_custom_io;
+    || is_custom_io || is_adjacent_to_custom_io;
 
     if ignore_wires && ty == NodeType::Wire && !(is_input | is_output) {
         return;
