@@ -285,6 +285,7 @@ impl<'a, W: World> InputSearchState<'a, W> {
                 if is_wire(self.world, neighbor_pos) {
                     if let Some(&neighbor_node) = self.pos_map.get(&neighbor_pos) {
                         if !discovered.contains_key(&neighbor_pos) {
+                            eprintln!("  Adding edge from {:?} to wire at {:?} (distance {})", wire_pos, neighbor_pos, distance + 1);
                             self.graph.add_edge(
                                 wire_node,
                                 neighbor_node,
