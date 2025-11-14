@@ -350,8 +350,10 @@ impl<'a, W: World> InputSearchState<'a, W> {
                                         CompileLink::new(LinkType::Default, distance),
                                     );
                                 }
-                                Block::RedstoneWallTorch { facing, .. } if facing.opposite().block_face() == *block_side => {
-                                    // Wall torch on side of the solid block
+                                Block::RedstoneWallTorch { facing, .. } if facing.block_face() == *block_side => {
+                                    // Wall torch attached to this side of the solid block
+                                    // A torch facing North is attached to a block to its South
+                                    // So if we go North from the block, we find a torch facing North
                                     self.graph.add_edge(
                                         wire_node,
                                         component_node,
