@@ -437,12 +437,23 @@ impl<'a, W: World> InputSearchState<'a, W> {
     fn search_comparator_side(&mut self, id: NodeIdx, pos: BlockPos, side: BlockDirection) {
         let side_pos = pos.offset(side.block_face());
         let side_block = self.world.get_block(side_pos);
+        
+        // BUGFIX: Check if this is a custom IO wire
+        // Custom IO wires can have their power changed dynamically at runtime via set_signal_strength(),
+        // so we must create a connection even if the wire currently has power=0.
+        // This ensures comparators can read the runtime power level from custom IO wires.
+        let is_custom_io_wire = matches!(side_block, Block::RedstoneWire { .. }) 
+            && self.custom_io.contains(&side_pos);
+        
         if (mchprs_redstone::is_diode(side_block)
             && self.provides_weak_power(side_block, side_pos, side.block_face()))
             || matches!(side_block, Block::RedstoneBlock { .. })
+            || is_custom_io_wire  // Treat custom IO wires like redstone blocks for comparator sides
         {
-            self.graph
-                .add_edge(self.pos_map[&side_pos], id, CompileLink::side(0));
+            if let Some(&side_node) = self.pos_map.get(&side_pos) {
+                self.graph
+                    .add_edge(side_node, id, CompileLink::side(0));
+            }
         } else if matches!(side_block, Block::RedstoneWire { .. }) {
             self.search_wire(id, side_pos, LinkType::Side, 0)
         }

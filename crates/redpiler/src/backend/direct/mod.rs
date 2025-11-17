@@ -302,6 +302,14 @@ impl JITBackend for DirectBackend {
             
             // set_node handles propagation to neighbors
             self.set_node(node_id, strength > 0, strength);
+            
+            // Update the block state immediately so it's synced when flush() is called.
+            // This ensures the wire's visual power level matches the redpiler signal.
+            if let Some((_, block)) = &mut self.blocks[node_id.index()] {
+                if let Block::RedstoneWire { ref mut wire } = block {
+                    wire.power = strength;
+                }
+            }
         } else {
             warn!("Tried to set signal strength at position {} which is not a redpiler node", pos);
         }
