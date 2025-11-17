@@ -517,8 +517,13 @@ impl<'a, W: World> InputSearchState<'a, W> {
                 let is_custom_io = self.custom_io.contains(&pos);
                 self.search_wire(id, pos, LinkType::Default, 0);
                 
-                // Custom IO wires need output edges to propagate power when set via set_signal_strength()
-                if is_custom_io {
+                // BUGFIX: ALL wires connected to custom IO need output edges to propagate power!
+                // Not just the custom IO wires themselves, but also any wire marked as input/output
+                // (which happens when they're connected to custom IO wires)
+                let node = &self.graph[id];
+                let needs_output_edges = is_custom_io || node.is_input || node.is_output;
+                
+                if needs_output_edges {
                     self.create_wire_output_edges(id, pos);
                 }
             }
