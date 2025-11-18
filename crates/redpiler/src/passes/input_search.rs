@@ -323,12 +323,26 @@ impl<'a, W: World> InputSearchState<'a, W> {
                             );
                         }
                         Block::RedstoneComparator { comparator } if comparator.facing.opposite().block_face() == *side => {
-                            // Comparator facing the wire
+                            // Comparator facing the wire (rear/back input)
                             self.graph.add_edge(
                                 wire_node,
                                 neighbor_node,
                                 CompileLink::new(LinkType::Default, distance),
                             );
+                        }
+                        Block::RedstoneComparator { comparator } => {
+                            // Check if wire is on the comparator's side (left or right)
+                            let comp_left = comparator.facing.rotate_ccw().block_face();
+                            let comp_right = comparator.facing.rotate().block_face();
+                            
+                            if *side == comp_left || *side == comp_right {
+                                // Wire is on comparator's side - create SIDE edge
+                                self.graph.add_edge(
+                                    wire_node,
+                                    neighbor_node,
+                                    CompileLink::new(LinkType::Side, distance),
+                                );
+                            }
                         }
                         _ => {}
                     }
