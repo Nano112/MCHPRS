@@ -17,6 +17,9 @@ pub(super) fn update_node(
             delay,
             facing_diode,
         } => {
+            if node.is_io && node.custom_io_override {
+                return;
+            }
             let should_be_locked = get_bool_side(node);
             if should_be_locked != node.locked {
                 set_node_locked(node, should_be_locked);
@@ -38,6 +41,9 @@ pub(super) fn update_node(
             }
         }
         NodeType::Torch => {
+            if node.is_io && node.custom_io_override {
+                return;
+            }
             if node.pending_tick {
                 return;
             }
@@ -51,6 +57,9 @@ pub(super) fn update_node(
             far_input,
             facing_diode,
         } => {
+            if node.is_io && node.custom_io_override {
+                return;
+            }
             if node.pending_tick {
                 return;
             }
@@ -72,6 +81,9 @@ pub(super) fn update_node(
             }
         }
         NodeType::Lamp => {
+            if node.is_io && node.custom_io_override {
+                return;
+            }
             let should_be_lit = get_bool_input(node);
             let lit = node.powered;
             if lit && !should_be_lit {
@@ -81,6 +93,9 @@ pub(super) fn update_node(
             }
         }
         NodeType::Trapdoor => {
+            if node.is_io && node.custom_io_override {
+                return;
+            }
             let should_be_powered = get_bool_input(node);
             if node.powered != should_be_powered {
                 set_node(node, should_be_powered);
@@ -136,6 +151,9 @@ pub(super) fn update_node(
             }
         }
         NodeType::NoteBlock { noteblock_id } => {
+            if node.is_io && node.custom_io_override {
+                return;
+            }
             let should_be_powered = get_bool_input(node);
             if node.powered != should_be_powered {
                 set_node(node, should_be_powered);

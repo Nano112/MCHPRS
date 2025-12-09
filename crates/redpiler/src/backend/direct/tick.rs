@@ -6,6 +6,10 @@ impl DirectBackend {
         let node = &mut self.nodes[node_id];
         node.pending_tick = false;
 
+        if node.is_io && node.custom_io_override {
+            return;
+        }
+
         match node.ty {
             NodeType::Repeater { delay, .. } => {
                 if node.locked {
