@@ -149,19 +149,18 @@ impl<'a, W: World> InputSearchState<'a, W> {
                 start_node,
                 CompileLink::new(link_ty, distance),
             );
-        } else if let Block::RedstoneWire { wire } = block {
+        } else if let Block::RedstoneWire { .. } = block {
             match side {
                 BlockFace::Top => self.search_wire(start_node, pos, link_ty, distance),
                 BlockFace::Bottom => {}
                 _ => {
-                    let direction = side.unwrap_direction();
-                    if search_wire
-                        && !wire::get_current_side(
-                            wire::get_regulated_sides(wire, self.world, pos),
-                            direction.opposite(),
-                        )
-                        .is_none()
-                    {
+                    // When a wire is directly adjacent to a node (like a lamp),
+                    // always search the wire network. The wire may not visually
+                    // "connect" toward the node (e.g. lamps aren't in can_connect_to),
+                    // but in vanilla Minecraft, wires still provide power to adjacent blocks.
+                    // The search_wire flag is only true for the initial search from a node,
+                    // not inside the BFS, so this doesn't cause recursive expansion.
+                    if search_wire {
                         self.search_wire(start_node, pos, link_ty, distance);
                     }
                 }
