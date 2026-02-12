@@ -231,6 +231,21 @@ impl JITBackend for DirectBackend {
         }
     }
 
+    fn set_signal_strength(&mut self, pos: BlockPos, strength: u8) {
+        let Some(&node_id) = self.pos_map.get(&pos) else {
+            warn!("set_signal_strength: no node at pos {}", pos);
+            return;
+        };
+        let strength = strength.min(15);
+        self.set_node(node_id, strength > 0, strength);
+    }
+
+    fn get_signal_strength(&self, pos: BlockPos) -> Option<u8> {
+        self.pos_map
+            .get(&pos)
+            .map(|&node_id| self.nodes[node_id].output_power)
+    }
+
     fn tick(&mut self) {
         let mut queues = self.scheduler.queues_this_tick();
 
@@ -395,5 +410,236 @@ impl fmt::Display for DirectBackend {
             }
         }
         writeln!(f, "}}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mchprs_blocks::blocks::ComparatorMode;
+    use node::{ForwardLink, Node, NodeInput, NodeType, Nodes};
+    use smallvec::SmallVec;
+
+    fn make_node(ty: NodeType, output_power: u8) -> Node {
+        Node {
+            ty,
+            default_inputs: NodeInput::default(),
+            side_inputs: NodeInput::default(),
+            updates: SmallVec::new(),
+            is_io: true,
+            powered: output_power > 0,
+            locked: false,
+            output_power,
+            changed: false,
+            pending_tick: false,
+        }
+    }
+
+    fn build_backend(nodes_vec: Vec<Node>, positions: Vec<BlockPos>) -> DirectBackend {
+        let len = nodes_vec.len();
+        let nodes = Nodes::new(nodes_vec.into_boxed_slice());
+        let mut pos_map = FxHashMap::default();
+        let mut blocks = Vec::new();
+        for i in 0..len {
+            let pos = positions[i];
+            pos_map.insert(pos, nodes.get(i));
+            blocks.push(Some((pos, mchprs_blocks::blocks::Block::Air {})));
+        }
+        DirectBackend {
+            nodes,
+            blocks,
+            pos_map,
+            scheduler: TickScheduler::default(),
+            events: Vec::new(),
+            noteblock_info: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn test_get_signal_strength_returns_none_for_unknown_pos() {
+        let backend = DirectBackend::default();
+        assert_eq!(backend.get_signal_strength(BlockPos::new(0, 0, 0)), None);
+    }
+
+    #[test]
+    fn test_get_signal_strength_returns_output_power() {
+        let comparator = make_node(
+            NodeType::Comparator {
+                mode: ComparatorMode::Compare,
+                far_input: None,
+                facing_diode: false,
+            },
+            7,
+        );
+        let pos = BlockPos::new(1, 2, 3);
+        let backend = build_backend(vec![comparator], vec![pos]);
+
+        assert_eq!(backend.get_signal_strength(pos), Some(7));
+    }
+
+    #[test]
+    fn test_set_signal_strength_updates_node() {
+        let comparator = make_node(
+            NodeType::Comparator {
+                mode: ComparatorMode::Compare,
+                far_input: None,
+                facing_diode: false,
+            },
+            0,
+        );
+        let pos = BlockPos::new(1, 2, 3);
+        let mut backend = build_backend(vec![comparator], vec![pos]);
+
+        assert_eq!(backend.get_signal_strength(pos), Some(0));
+
+        backend.set_signal_strength(pos, 12);
+        assert_eq!(backend.get_signal_strength(pos), Some(12));
+    }
+
+    #[test]
+    fn test_set_signal_strength_clamps_to_15() {
+        let wire = make_node(NodeType::Wire, 0);
+        let pos = BlockPos::new(0, 0, 0);
+        let mut backend = build_backend(vec![wire], vec![pos]);
+
+        backend.set_signal_strength(pos, 255);
+        assert_eq!(backend.get_signal_strength(pos), Some(15));
+    }
+
+    #[test]
+    fn test_set_signal_strength_propagates_to_downstream() {
+        // Create: comparator(0,0,0) --[default, ss=0]--> lamp(1,0,0)
+        let mut comparator = make_node(
+            NodeType::Comparator {
+                mode: ComparatorMode::Compare,
+                far_input: None,
+                facing_diode: false,
+            },
+            0,
+        );
+        let mut lamp = make_node(NodeType::Lamp, 0);
+
+        // Wire comparator -> lamp (default link, ss distance 0)
+        let lamp_id = unsafe { NodeId::from_index(1) };
+        comparator.updates.push(ForwardLink::new(lamp_id, false, 0));
+
+        // Initialize lamp's default_inputs to reflect the edge from comparator (starting at power 0)
+        lamp.default_inputs.ss_counts[0] = 1;
+
+        let comp_pos = BlockPos::new(0, 0, 0);
+        let lamp_pos = BlockPos::new(1, 0, 0);
+        let mut backend = build_backend(vec![comparator, lamp], vec![comp_pos, lamp_pos]);
+
+        // Initially lamp has no input
+        assert_eq!(backend.get_signal_strength(lamp_pos), Some(0));
+
+        // Inject signal into comparator
+        backend.set_signal_strength(comp_pos, 15);
+
+        // Comparator should be 15
+        assert_eq!(backend.get_signal_strength(comp_pos), Some(15));
+
+        // Lamp should have received the update (its default_inputs should reflect the signal)
+        // The lamp's update_node sets it to lit immediately (no tick delay for turning on)
+        let lamp_node_id = backend.pos_map[&lamp_pos];
+        assert!(backend.nodes[lamp_node_id].powered, "lamp should be lit immediately when input received");
+    }
+
+    #[test]
+    fn test_set_signal_strength_propagates_to_wire() {
+        // In the compiled graph, wire nodes record state but don't cascade propagation.
+        // In real circuits, the compiler coalesces wires and creates direct edges.
+        // Here we just verify the wire node updates its output_power correctly.
+        let mut comparator = make_node(
+            NodeType::Comparator {
+                mode: ComparatorMode::Compare,
+                far_input: None,
+                facing_diode: false,
+            },
+            0,
+        );
+        let mut wire = make_node(NodeType::Wire, 0);
+
+        let wire_id = unsafe { NodeId::from_index(1) };
+        comparator.updates.push(ForwardLink::new(wire_id, false, 0));
+
+        // Initialize wire's input to reflect edge from comparator at power 0
+        wire.default_inputs.ss_counts[0] = 1;
+
+        let comp_pos = BlockPos::new(0, 0, 0);
+        let wire_pos = BlockPos::new(1, 0, 0);
+        let mut backend = build_backend(vec![comparator, wire], vec![comp_pos, wire_pos]);
+
+        backend.set_signal_strength(comp_pos, 15);
+
+        // Wire should reflect the new signal
+        assert_eq!(backend.get_signal_strength(wire_pos), Some(15));
+
+        // Set back to 0
+        backend.set_signal_strength(comp_pos, 0);
+        assert_eq!(backend.get_signal_strength(wire_pos), Some(0));
+    }
+
+    #[test]
+    fn test_set_signal_strength_analog_values() {
+        // Test that intermediate signal strengths (not just 0/15) work correctly
+        let comparator = make_node(
+            NodeType::Comparator {
+                mode: ComparatorMode::Compare,
+                far_input: None,
+                facing_diode: false,
+            },
+            0,
+        );
+        let pos = BlockPos::new(0, 0, 0);
+        let mut backend = build_backend(vec![comparator], vec![pos]);
+
+        for strength in 0..=15 {
+            backend.set_signal_strength(pos, strength);
+            assert_eq!(backend.get_signal_strength(pos), Some(strength));
+        }
+    }
+
+    #[test]
+    fn test_set_signal_strength_zero_turns_off() {
+        let mut comparator = make_node(
+            NodeType::Comparator {
+                mode: ComparatorMode::Compare,
+                far_input: None,
+                facing_diode: false,
+            },
+            15,
+        );
+
+        let lamp_id = unsafe { NodeId::from_index(1) };
+        comparator.updates.push(ForwardLink::new(lamp_id, false, 0));
+
+        let comp_pos = BlockPos::new(0, 0, 0);
+        let lamp_pos = BlockPos::new(1, 0, 0);
+
+        // Start with lamp powered via initial default_inputs reflecting comparator at power 15
+        let mut lamp_node = make_node(NodeType::Lamp, 0);
+        lamp_node.default_inputs.ss_counts[15] = 1;
+        lamp_node.powered = true;
+
+        let mut backend = build_backend(vec![comparator, lamp_node], vec![comp_pos, lamp_pos]);
+
+        // Verify lamp starts powered
+        let lamp_nid = backend.pos_map[&lamp_pos];
+        assert!(backend.nodes[lamp_nid].powered);
+
+        // Set comparator to 0
+        backend.set_signal_strength(comp_pos, 0);
+        assert_eq!(backend.get_signal_strength(comp_pos), Some(0));
+
+        // Lamp schedules a tick to turn off (delay 2)
+        backend.tick(); // tick 1
+        backend.tick(); // tick 2
+
+        let lamp_nid = backend.pos_map[&lamp_pos];
+        assert!(
+            !backend.nodes[lamp_nid].powered,
+            "lamp should be off after signal removed"
+        );
     }
 }

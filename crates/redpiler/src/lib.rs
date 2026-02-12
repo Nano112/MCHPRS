@@ -51,6 +51,9 @@ pub struct CompilerOptions {
     pub wire_dot_out: bool,
     /// The backend variant to be used after compilation
     pub backend_variant: BackendVariant,
+    /// Positions to designate as custom IO nodes for signal injection/monitoring.
+    /// Nodes at these positions are marked as IO so they survive optimization and io_only flush.
+    pub custom_io: Vec<BlockPos>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -218,6 +221,21 @@ impl Compiler {
         self.backend().set_pressure_plate(pos, powered);
     }
 
+    pub fn set_signal_strength(&mut self, pos: BlockPos, strength: u8) {
+        self.backend().set_signal_strength(pos, strength);
+    }
+
+    pub fn get_signal_strength(&self, pos: BlockPos) -> Option<u8> {
+        if !self.is_active {
+            return None;
+        }
+        if let Some(jit) = &self.jit {
+            jit.get_signal_strength(pos)
+        } else {
+            None
+        }
+    }
+
     pub fn flush<W: World>(&mut self, world: &mut W) {
         let io_only = self.options.io_only;
         self.backend().flush(world, io_only);
@@ -256,6 +274,7 @@ mod tests {
             export_dot_graph: false,
             wire_dot_out: false,
             backend_variant: BackendVariant::default(),
+            custom_io: Vec::new(),
         };
         let options = CompilerOptions::parse(input);
 

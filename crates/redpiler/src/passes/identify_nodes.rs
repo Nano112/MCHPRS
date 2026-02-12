@@ -31,6 +31,7 @@ impl<W: World> Pass<W> for IdentifyNodes {
     ) {
         let ignore_wires = options.optimize;
         let plot = input.world;
+        let custom_io_set: FxHashSet<BlockPos> = options.custom_io.iter().cloned().collect();
 
         let mut first_pass = FxHashMap::default();
         let mut second_pass = FxHashSet::default();
@@ -44,6 +45,7 @@ impl<W: World> Pass<W> for IdentifyNodes {
                 &mut second_pass,
                 ignore_wires,
                 options.wire_dot_out,
+                &custom_io_set,
                 plot,
                 pos,
             );
@@ -70,6 +72,7 @@ fn for_pos<W: World>(
     second_pass: &mut FxHashSet<BlockPos>,
     ignore_wires: bool,
     wire_dot_out: bool,
+    custom_io_set: &FxHashSet<BlockPos>,
     world: &W,
     pos: BlockPos,
 ) {
@@ -85,15 +88,21 @@ fn for_pos<W: World>(
         return;
     };
 
-    let is_input = matches!(
-        ty,
-        NodeType::Button | NodeType::Lever | NodeType::PressurePlate
-    );
-    let is_output = matches!(
-        ty,
-        NodeType::Trapdoor | NodeType::Lamp | NodeType::NoteBlock { .. }
-    ) || matches!(block, Block::RedstoneWire { wire } if wire_dot_out && wire::is_dot(wire));
+    let is_custom_io = custom_io_set.contains(&pos);
 
+    let is_input = is_custom_io
+        || matches!(
+            ty,
+            NodeType::Button | NodeType::Lever | NodeType::PressurePlate
+        );
+    let is_output = is_custom_io
+        || matches!(
+            ty,
+            NodeType::Trapdoor | NodeType::Lamp | NodeType::NoteBlock { .. }
+        )
+        || matches!(block, Block::RedstoneWire { wire } if wire_dot_out && wire::is_dot(wire));
+
+    // Don't skip custom IO wires even when optimizing
     if ignore_wires && ty == NodeType::Wire && !(is_input | is_output) {
         return;
     }

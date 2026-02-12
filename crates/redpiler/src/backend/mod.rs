@@ -21,6 +21,8 @@ pub trait JITBackend {
     fn tick(&mut self);
     fn on_use_block(&mut self, pos: BlockPos);
     fn set_pressure_plate(&mut self, pos: BlockPos, powered: bool);
+    fn set_signal_strength(&mut self, pos: BlockPos, strength: u8);
+    fn get_signal_strength(&self, pos: BlockPos) -> Option<u8>;
     fn flush<W: World>(&mut self, world: &mut W, io_only: bool);
     fn reset<W: World>(&mut self, world: &mut W, io_only: bool);
     fn has_pending_ticks(&self) -> bool;
