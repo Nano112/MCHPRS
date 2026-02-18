@@ -9,7 +9,7 @@ use crate::passes::AnalysisInfos;
 use crate::{CompilerInput, CompilerOptions};
 use mchprs_blocks::blocks::{Block, ButtonFace, LeverFace};
 use mchprs_blocks::{BlockDirection, BlockFace, BlockPos};
-use mchprs_redstone::{self, comparator, wire};
+use mchprs_redstone::{self, comparator};
 use mchprs_world::World;
 use petgraph::visit::NodeIndexable;
 use rustc_hash::FxHashMap;
@@ -128,7 +128,7 @@ impl<'a, W: World> InputSearchState<'a, W> {
                     );
                 }
 
-                if let Block::RedstoneWire { wire } = block {
+                if let Block::RedstoneWire { .. } = block {
                     if !search_wire {
                         continue;
                     }
@@ -138,14 +138,10 @@ impl<'a, W: World> InputSearchState<'a, W> {
                         }
                         BlockFace::Bottom => {}
                         _ => {
-                            let direction = side.unwrap_direction();
-                            if search_wire
-                                && !wire::get_current_side(
-                                    wire::get_regulated_sides(wire, self.world, pos),
-                                    direction.opposite(),
-                                )
-                                .is_none()
-                            {
+                            // Always search adjacent wire networks regardless of visual
+                            // connection state. In vanilla Minecraft, wires provide power
+                            // to adjacent blocks even if they don't visually "connect".
+                            if search_wire {
                                 self.search_wire(start_node, pos, link_ty, distance);
                             }
                         }
@@ -164,19 +160,14 @@ impl<'a, W: World> InputSearchState<'a, W> {
                 }
             }
         
-        } else if let Block::RedstoneWire { wire } = block {
+        } else if let Block::RedstoneWire { .. } = block {
             match side {
                 BlockFace::Top => self.search_wire(start_node, pos, link_ty, distance),
                 BlockFace::Bottom => {}
                 _ => {
-                    let direction = side.unwrap_direction();
-                    if search_wire
-                        && !wire::get_current_side(
-                            wire::get_regulated_sides(wire, self.world, pos),
-                            direction.opposite(),
-                        )
-                        .is_none()
-                    {
+                    // Always search adjacent wire networks regardless of visual
+                    // connection state when doing initial search from a node.
+                    if search_wire {
                         self.search_wire(start_node, pos, link_ty, distance);
                     }
                 }

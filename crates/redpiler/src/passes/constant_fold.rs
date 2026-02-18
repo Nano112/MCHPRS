@@ -41,6 +41,12 @@ fn fold(graph: &mut CompileGraph) -> usize {
             continue;
         }
 
+        // Don't fold custom IO nodes - they need to remain their original type
+        // so that set_signal_strength can propagate changes through ForwardLinks
+        if !graph[idx].is_removable() {
+            continue;
+        }
+
         let mut default_power = 0;
         let mut side_power = 0;
         for edge in graph.edges_directed(idx, Direction::Incoming) {
