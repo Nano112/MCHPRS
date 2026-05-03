@@ -76,6 +76,12 @@ pub struct Annotations {}
 pub struct CompileNode {
     pub ty: NodeType,
     pub block: Option<(BlockPos, u32)>,
+    /// World positions that have been coalesced into this node and must
+    /// receive the same block-state writes during flush. Empty in the
+    /// common case; only populated by the Coalesce pass when it merges
+    /// observably-distinct blocks (e.g. two redstone torches with
+    /// identical inputs at different positions).
+    pub aliased_positions: Vec<BlockPos>,
     pub state: NodeState,
 
     pub is_input: bool,

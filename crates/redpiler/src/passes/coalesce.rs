@@ -3,6 +3,7 @@ use crate::compile_graph::{CompileGraph, LinkType, NodeIdx, NodeType};
 use crate::passes::AnalysisInfos;
 use crate::{CompilerInput, CompilerOptions};
 use itertools::Itertools;
+use mchprs_blocks::BlockPos;
 use mchprs_world::World;
 use petgraph::visit::{EdgeRef, NodeIndexable};
 use petgraph::Direction;
@@ -101,5 +102,18 @@ fn coalesce(graph: &mut CompileGraph, node: NodeIdx, into: NodeIdx) {
         let weight = graph.remove_edge(edge_idx).unwrap();
         graph.add_edge(into, dest, weight);
     }
+
+    // The merged-away node may back a distinct world block whose visual
+    // state still needs syncing on flush (e.g. a redstone torch at a
+    // different position with the same simulation behaviour). Carry its
+    // primary position and any nested aliases over to the surviving node
+    // so the backend writes the same block to every position.
+    let primary_pos = graph[node].block.map(|(pos, _)| pos);
+    let aliases: Vec<BlockPos> = std::mem::take(&mut graph[node].aliased_positions);
+    if let Some(pos) = primary_pos {
+        graph[into].aliased_positions.push(pos);
+    }
+    graph[into].aliased_positions.extend(aliases);
+
     graph.remove_node(node);
 }

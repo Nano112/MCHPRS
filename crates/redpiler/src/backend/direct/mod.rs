@@ -41,7 +41,11 @@ impl TickScheduler {
     const NUM_PRIORITIES: usize = 4;
     const NUM_QUEUES: usize = 16;
 
-    fn reset<W: World>(&mut self, world: &mut W, blocks: &[Option<(BlockPos, Block)>]) {
+    fn reset<W: World>(
+        &mut self,
+        world: &mut W,
+        blocks: &[Option<(BlockPos, Block, Vec<BlockPos>)>],
+    ) {
         for (idx, queues) in self.queues_deque.iter().enumerate() {
             let delay = if self.pos >= idx {
                 idx + Self::NUM_QUEUES
@@ -50,11 +54,11 @@ impl TickScheduler {
             } - self.pos;
             for (entries, priority) in queues.0.iter().zip(Self::priorities()) {
                 for node in entries {
-                    let Some((pos, _)) = blocks[node.index()] else {
+                    let Some((pos, _, _)) = &blocks[node.index()] else {
                         warn!("Cannot schedule tick for node {:?} because block information is missing", node);
                         continue;
                     };
-                    world.schedule_tick(pos, delay as u32, priority);
+                    world.schedule_tick(*pos, delay as u32, priority);
                 }
             }
         }
@@ -109,7 +113,11 @@ enum Event {
 #[derive(Default)]
 pub struct DirectBackend {
     nodes: Nodes,
-    blocks: Vec<Option<(BlockPos, Block)>>,
+    /// Per-node block info. The third element holds positions that the
+    /// Coalesce pass merged into this node — when the node's state
+    /// changes we must write the new block-state to all of them, not
+    /// just the primary position.
+    blocks: Vec<Option<(BlockPos, Block, Vec<BlockPos>)>>,
     pos_map: FxHashMap<BlockPos, NodeId>,
     scheduler: TickScheduler,
     events: Vec<Event>,
@@ -128,7 +136,7 @@ impl DirectBackend {
         node.changed = true;
         node.powered = powered;
         node.output_power = new_power;
-        
+
         for i in 0..node.updates.len() {
             let node = &self.nodes[node_id];
             let update_link = unsafe { *node.updates.get_unchecked(i) };
@@ -184,7 +192,7 @@ impl JITBackend for DirectBackend {
         let nodes = std::mem::take(&mut self.nodes);
 
         for (i, node) in nodes.into_inner().iter().enumerate() {
-            let Some((pos, block)) = self.blocks[i] else {
+            let Some((pos, block, aliases)) = self.blocks[i].clone() else {
                 continue;
             };
             if matches!(node.ty, NodeType::Comparator { .. }) {
@@ -196,6 +204,9 @@ impl JITBackend for DirectBackend {
 
             if io_only && !node.is_io {
                 world.set_block(pos, block);
+                for alias in &aliases {
+                    world.set_block(*alias, block);
+                }
             }
         }
 
@@ -253,7 +264,7 @@ impl JITBackend for DirectBackend {
             }
         }
         for (i, node) in self.nodes.inner_mut().iter_mut().enumerate() {
-            let Some((pos, block)) = &mut self.blocks[i] else {
+            let Some((pos, block, aliases)) = &mut self.blocks[i] else {
                 continue;
             };
             if node.changed && (!io_only || node.is_io) {
@@ -267,6 +278,13 @@ impl JITBackend for DirectBackend {
                     repeater.locked = node.locked;
                 }
                 world.set_block(*pos, *block);
+                // Replicate the same block to every position the Coalesce
+                // pass merged into this node — otherwise the merged-away
+                // world blocks (e.g. a sibling redstone torch) keep their
+                // pre-simulation state.
+                for alias in aliases.iter() {
+                    world.set_block(*alias, *block);
+                }
             }
             // Keep custom IO nodes with override marked as changed
             // so they continue syncing their visual state
@@ -305,7 +323,7 @@ impl JITBackend for DirectBackend {
             
             // Update the block state immediately so it's synced when flush() is called.
             // This ensures the wire's visual power level matches the redpiler signal.
-            if let Some((_, block)) = &mut self.blocks[node_id.index()] {
+            if let Some((_, block, _)) = &mut self.blocks[node_id.index()] {
                 if let Block::RedstoneWire { ref mut wire } = block {
                     wire.power = strength;
                 }
@@ -411,7 +429,7 @@ impl fmt::Display for DirectBackend {
                 NodeType::Constant => format!("Constant({})", node.output_power),
                 NodeType::NoteBlock { .. } => "NoteBlock".to_string(),
             };
-            let pos = if let Some((pos, _)) = self.blocks[id] {
+            let pos = if let Some((pos, _, _)) = &self.blocks[id] {
                 format!("{}, {}, {}", pos.x, pos.y, pos.z)
             } else {
                 "No Pos".to_string()

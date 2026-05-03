@@ -174,14 +174,27 @@ pub fn compile(
 
     backend.blocks = graph
         .node_weights()
-        .map(|node| node.block.map(|(pos, id)| (pos, Block::from_id(id))))
+        .map(|node| {
+            node.block.map(|(pos, id)| {
+                (
+                    pos,
+                    Block::from_id(id),
+                    node.aliased_positions.clone(),
+                )
+            })
+        })
         .collect();
     backend.nodes = Nodes::new(nodes);
 
-    // Create a mapping from block pos to backend NodeId
+    // Create a mapping from block pos to backend NodeId. Aliased positions
+    // (collapsed-into siblings from the Coalesce pass) all point at the
+    // surviving node so any per-position lookup still resolves.
     for i in 0..backend.blocks.len() {
-        if let Some((pos, _)) = backend.blocks[i] {
+        if let Some((pos, _, ref aliases)) = backend.blocks[i] {
             backend.pos_map.insert(pos, backend.nodes.get(i));
+            for &alias in aliases {
+                backend.pos_map.insert(alias, backend.nodes.get(i));
+            }
         }
     }
 
