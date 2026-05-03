@@ -176,7 +176,7 @@ fn for_pos<W: World>(
     let node_idx = graph.add_node(CompileNode {
         ty,
         block: Some((pos, id)),
-        aliased_positions: Vec::new(),
+        aliased_blocks: Vec::new(),
         state,
 
         is_input,

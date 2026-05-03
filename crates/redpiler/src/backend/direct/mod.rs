@@ -44,7 +44,7 @@ impl TickScheduler {
     fn reset<W: World>(
         &mut self,
         world: &mut W,
-        blocks: &[Option<(BlockPos, Block, Vec<BlockPos>)>],
+        blocks: &[Option<(BlockPos, Block, Vec<(BlockPos, Block)>)>],
     ) {
         for (idx, queues) in self.queues_deque.iter().enumerate() {
             let delay = if self.pos >= idx {
@@ -113,11 +113,13 @@ enum Event {
 #[derive(Default)]
 pub struct DirectBackend {
     nodes: Nodes,
-    /// Per-node block info. The third element holds positions that the
-    /// Coalesce pass merged into this node — when the node's state
-    /// changes we must write the new block-state to all of them, not
-    /// just the primary position.
-    blocks: Vec<Option<(BlockPos, Block, Vec<BlockPos>)>>,
+    /// Per-node block info. The third element holds positions+blocks
+    /// that the Coalesce pass merged into this node. Each alias keeps
+    /// its *own* original Block so orientation-dependent fields
+    /// (repeater facing, etc.) survive — on flush the simulation-
+    /// relevant fields are stamped onto the alias's block before
+    /// writing it back.
+    blocks: Vec<Option<(BlockPos, Block, Vec<(BlockPos, Block)>)>>,
     pos_map: FxHashMap<BlockPos, NodeId>,
     scheduler: TickScheduler,
     events: Vec<Event>,
@@ -204,8 +206,8 @@ impl JITBackend for DirectBackend {
 
             if io_only && !node.is_io {
                 world.set_block(pos, block);
-                for alias in &aliases {
-                    world.set_block(*alias, block);
+                for (alias_pos, alias_block) in &aliases {
+                    world.set_block(*alias_pos, *alias_block);
                 }
             }
         }
@@ -268,22 +270,21 @@ impl JITBackend for DirectBackend {
                 continue;
             };
             if node.changed && (!io_only || node.is_io) {
-                if let Some(powered) = block_powered_mut(block) {
-                    *powered = node.powered
-                }
-                if let Block::RedstoneWire { ref mut wire, .. } = block {
-                    wire.power = node.output_power;
-                };
-                if let Block::RedstoneRepeater { ref mut repeater } = block {
-                    repeater.locked = node.locked;
-                }
+                stamp_simulation_state(block, node.powered, node.output_power, node.locked);
                 world.set_block(*pos, *block);
-                // Replicate the same block to every position the Coalesce
-                // pass merged into this node — otherwise the merged-away
-                // world blocks (e.g. a sibling redstone torch) keep their
-                // pre-simulation state.
-                for alias in aliases.iter() {
-                    world.set_block(*alias, *block);
+                // For every position the Coalesce pass merged into this
+                // node, stamp the same simulation-relevant fields onto
+                // the alias's *own* block (preserving orientation, etc.)
+                // and write that. Without this we'd overwrite e.g. a
+                // mirror-image repeater's `facing` with the survivor's.
+                for (alias_pos, alias_block) in aliases.iter_mut() {
+                    stamp_simulation_state(
+                        alias_block,
+                        node.powered,
+                        node.output_power,
+                        node.locked,
+                    );
+                    world.set_block(*alias_pos, *alias_block);
                 }
             }
             // Keep custom IO nodes with override marked as changed
@@ -340,6 +341,22 @@ impl JITBackend for DirectBackend {
 
 /// Set node for use in `update`. None of the nodes here have usable output power,
 /// so this function does not set that.
+/// Stamp the simulation-relevant fields (`powered`/`lit`, wire `power`,
+/// repeater `locked`) onto a block in-place, leaving everything else
+/// (orientation, decorative state, ...) alone. Used by `flush()` so a
+/// Coalesce-merged alias block keeps its own facing.
+fn stamp_simulation_state(block: &mut Block, powered: bool, output_power: u8, locked: bool) {
+    if let Some(p) = block_powered_mut(block) {
+        *p = powered;
+    }
+    if let Block::RedstoneWire { ref mut wire, .. } = block {
+        wire.power = output_power;
+    }
+    if let Block::RedstoneRepeater { ref mut repeater } = block {
+        repeater.locked = locked;
+    }
+}
+
 fn set_node(node: &mut Node, powered: bool) {
     node.powered = powered;
     node.changed = true;

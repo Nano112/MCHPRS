@@ -104,16 +104,16 @@ fn coalesce(graph: &mut CompileGraph, node: NodeIdx, into: NodeIdx) {
     }
 
     // The merged-away node may back a distinct world block whose visual
-    // state still needs syncing on flush (e.g. a redstone torch at a
-    // different position with the same simulation behaviour). Carry its
-    // primary position and any nested aliases over to the surviving node
-    // so the backend writes the same block to every position.
-    let primary_pos = graph[node].block.map(|(pos, _)| pos);
-    let aliases: Vec<BlockPos> = std::mem::take(&mut graph[node].aliased_positions);
-    if let Some(pos) = primary_pos {
-        graph[into].aliased_positions.push(pos);
+    // state still needs syncing on flush. Carry its primary block (with
+    // its own block-id intact, so orientation fields like a repeater's
+    // facing survive) plus any already-merged aliases over to the
+    // surviving node.
+    let primary = graph[node].block;
+    let aliases: Vec<(BlockPos, u32)> = std::mem::take(&mut graph[node].aliased_blocks);
+    if let Some(entry) = primary {
+        graph[into].aliased_blocks.push(entry);
     }
-    graph[into].aliased_positions.extend(aliases);
+    graph[into].aliased_blocks.extend(aliases);
 
     graph.remove_node(node);
 }

@@ -317,3 +317,80 @@ fn symmetric_torch_arms_must_match(backend: TestBackend) {
     runner.check_block_powered(torch_n_pos, false);
     runner.check_block_powered(torch_s_pos, false);
 }
+
+// Two mirror-image repeaters fed by the same powered block must keep
+// their original `facing` after flush — Coalesce merges them into one
+// node (same delay, same single incoming edge), and a naive flush would
+// stamp the survivor's whole Block (including facing) over the alias's
+// world position.
+test_all_backends!(symmetric_repeaters_keep_facing);
+fn symmetric_repeaters_keep_facing(backend: TestBackend) {
+    use mchprs_blocks::blocks::{Lever, LeverFace, RedstoneRepeater};
+
+    let host_pos = pos(1, 1, 2);
+    let lever_pos = pos(0, 1, 2);
+    let rep_n_pos = pos(1, 1, 1);
+    let rep_s_pos = pos(1, 1, 3);
+
+    let mut world = TestWorld::new(1);
+    world.set_block(host_pos, Block::Sandstone {});
+    world.set_block(
+        lever_pos,
+        Block::Lever {
+            lever: Lever {
+                face: LeverFace::Wall,
+                facing: BlockDirection::West,
+                powered: false,
+            },
+        },
+    );
+    // In MCHPRS, a repeater's `facing` points at its INPUT side (the
+    // block whose power it reads). Mirror image: rep_n is north of the
+    // host so it must face South to read the host; rep_s is south of
+    // the host so it must face North to read the host. Both repeaters
+    // share the same NodeType (delay=1, facing_diode=false), so the
+    // Coalesce pass merges them — the regression we want to catch is
+    // an alias's facing getting clobbered by the survivor's.
+    place_on_block(
+        &mut world,
+        rep_n_pos,
+        Block::RedstoneRepeater {
+            repeater: RedstoneRepeater {
+                delay: 1,
+                facing: BlockDirection::South,
+                ..Default::default()
+            },
+        },
+    );
+    place_on_block(
+        &mut world,
+        rep_s_pos,
+        Block::RedstoneRepeater {
+            repeater: RedstoneRepeater {
+                delay: 1,
+                facing: BlockDirection::North,
+                ..Default::default()
+            },
+        },
+    );
+
+    let mut runner = BackendRunner::new(world, backend);
+    runner.use_block(lever_pos);
+    runner.tick();
+    runner.tick();
+
+    runner.check_block_powered(rep_n_pos, true);
+    runner.check_block_powered(rep_s_pos, true);
+
+    // Critical assertion: each repeater kept its own facing.
+    let n_facing = match runner.get_block(rep_n_pos) {
+        Block::RedstoneRepeater { repeater } => repeater.facing,
+        b => panic!("expected repeater at {:?}, got {:?}", rep_n_pos, b),
+    };
+    let s_facing = match runner.get_block(rep_s_pos) {
+        Block::RedstoneRepeater { repeater } => repeater.facing,
+        b => panic!("expected repeater at {:?}, got {:?}", rep_s_pos, b),
+    };
+    assert_eq!(n_facing, BlockDirection::South, "north repeater's facing was overwritten");
+    assert_eq!(s_facing, BlockDirection::North, "south repeater's facing was overwritten");
+}
