@@ -394,3 +394,56 @@ fn symmetric_repeaters_keep_facing(backend: TestBackend) {
     assert_eq!(n_facing, BlockDirection::South, "north repeater's facing was overwritten");
     assert_eq!(s_facing, BlockDirection::North, "south repeater's facing was overwritten");
 }
+
+// Wire that visually points only east/west must NOT power a solid block
+// to its north or south. The redpiler's input_search previously walked
+// every wire adjacent to a solid block regardless of visual side, which
+// let a lever-driven E/W wire incorrectly power a north-side neighbour
+// (and through it a repeater rear-input).
+test_all_backends!(wire_does_not_power_perpendicular_solid);
+fn wire_does_not_power_perpendicular_solid(backend: TestBackend) {
+    use mchprs_blocks::blocks::{Lever, LeverFace, RedstoneRepeater, RedstoneWire, RedstoneWireSide};
+
+    let lever_pos = pos(0, 1, 0);
+    // E/W-only wire at (1, 1, 0); lever sits to its west.
+    let wire_pos  = pos(1, 1, 0);
+    // Solid block to the wire's NORTH (i.e. -z = pos(1, 1, -1)? No,
+    // we're inside a single chunk so pick z=1 = SOUTH instead). The
+    // wire's south side is None after regulation, so this block is
+    // perpendicular to the wire's visual run.
+    let perp_solid_pos = pos(1, 1, 1);
+    // Repeater whose rear sits on top of perp_solid: facing=North means
+    // input direction is north → reads from (1, 1, 1).
+    let repeater_pos   = pos(1, 1, 2);
+
+    let mut world = TestWorld::new(1);
+    make_lever(&mut world, lever_pos);
+
+    let ew_wire = RedstoneWire {
+        north: RedstoneWireSide::None,
+        south: RedstoneWireSide::None,
+        east:  RedstoneWireSide::Side,
+        west:  RedstoneWireSide::Side,
+        power: 0,
+    };
+    place_on_block(&mut world, wire_pos, Block::RedstoneWire { wire: ew_wire });
+    // Solid host for the perpendicular block (place_on_block handles it).
+    place_on_block(&mut world, perp_solid_pos, Block::Sandstone {});
+    place_on_block(
+        &mut world,
+        repeater_pos,
+        Block::RedstoneRepeater {
+            repeater: RedstoneRepeater {
+                delay: 1,
+                facing: BlockDirection::North,
+                ..Default::default()
+            },
+        },
+    );
+
+    let mut runner = BackendRunner::new(world, backend);
+    runner.use_block(lever_pos);
+    runner.tick();
+    runner.tick();
+    runner.check_block_powered(repeater_pos, false);
+}

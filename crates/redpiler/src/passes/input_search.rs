@@ -7,9 +7,9 @@ use super::Pass;
 use crate::compile_graph::{CompileGraph, CompileLink, LinkType, NodeIdx};
 use crate::passes::AnalysisInfos;
 use crate::{CompilerInput, CompilerOptions};
-use mchprs_blocks::blocks::{Block, ButtonFace, LeverFace};
+use mchprs_blocks::blocks::{Block, ButtonFace, LeverFace, RedstoneWireSide};
 use mchprs_blocks::{BlockDirection, BlockFace, BlockPos};
-use mchprs_redstone::{self, comparator};
+use mchprs_redstone::{self, comparator, wire as wire_helpers};
 use mchprs_world::World;
 use petgraph::visit::NodeIndexable;
 use rustc_hash::FxHashMap;
@@ -128,7 +128,7 @@ impl<'a, W: World> InputSearchState<'a, W> {
                     );
                 }
 
-                if let Block::RedstoneWire { .. } = block {
+                if let Block::RedstoneWire { wire } = block {
                     if !search_wire {
                         continue;
                     }
@@ -137,13 +137,29 @@ impl<'a, W: World> InputSearchState<'a, W> {
                             self.search_wire(start_node, pos, link_ty, distance);
                         }
                         BlockFace::Bottom => {}
-                        _ => {
-                            // Always search adjacent wire networks regardless of visual
-                            // connection state. In vanilla Minecraft, wires provide power
-                            // to adjacent blocks even if they don't visually "connect".
-                            if search_wire {
-                                self.search_wire(start_node, pos, link_ty, distance);
+                        horizontal => {
+                            // A horizontally-adjacent wire only weakly powers
+                            // this solid block when its visual side actually
+                            // points toward us. From the wire's perspective
+                            // the solid block sits in the OPPOSITE direction
+                            // of the iteration's `side`, so we check that
+                            // side of the (regulated) wire.
+                            let wire_side_toward_solid =
+                                horizontal.unwrap_direction().opposite();
+                            let regulated = wire_helpers::get_regulated_sides(
+                                wire, self.world, pos,
+                            );
+                            let connection = wire_helpers::get_current_side(
+                                regulated,
+                                wire_side_toward_solid,
+                            );
+                            if !matches!(
+                                connection,
+                                RedstoneWireSide::Side | RedstoneWireSide::Up
+                            ) {
+                                continue;
                             }
+                            self.search_wire(start_node, pos, link_ty, distance);
                         }
                     }
                 }
@@ -160,15 +176,27 @@ impl<'a, W: World> InputSearchState<'a, W> {
                 }
             }
         
-        } else if let Block::RedstoneWire { .. } = block {
+        } else if let Block::RedstoneWire { wire } = block {
             match side {
                 BlockFace::Top => self.search_wire(start_node, pos, link_ty, distance),
                 BlockFace::Bottom => {}
-                _ => {
-                    // Always search adjacent wire networks regardless of visual
-                    // connection state when doing initial search from a node.
-                    if search_wire {
-                        self.search_wire(start_node, pos, link_ty, distance);
+                horizontal => {
+                    // Mirror of the inner branch: only walk this wire if
+                    // its visual side actually points toward the source
+                    // we came from (the start_node's adjacent face).
+                    if !search_wire {
+                        // Nothing else to do.
+                    } else {
+                        let direction = horizontal.unwrap_direction().opposite();
+                        let regulated = wire_helpers::get_regulated_sides(
+                            wire, self.world, pos,
+                        );
+                        if !matches!(
+                            wire_helpers::get_current_side(regulated, direction),
+                            RedstoneWireSide::None
+                        ) {
+                            self.search_wire(start_node, pos, link_ty, distance);
+                        }
                     }
                 }
             }
