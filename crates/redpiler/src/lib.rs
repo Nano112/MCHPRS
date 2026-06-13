@@ -14,6 +14,10 @@ use tracing::{debug, error, trace, warn};
 
 pub use task_monitor::TaskMonitor;
 
+/// Re-export of the serializable graph IR so downstream crates can name the
+/// extracted node/link types without depending on `redpiler_graph` directly.
+pub use redpiler_graph;
+
 fn block_powered_mut(block: &mut Block) -> Option<&mut bool> {
     Some(match block {
         Block::RedstoneComparator { comparator } => &mut comparator.powered,
@@ -172,6 +176,27 @@ impl Compiler {
         self.options = options;
         self.is_active = true;
         debug!("Compile completed");
+    }
+
+    /// Run the compilation passes and return the optimized redstone graph as a
+    /// serializable flat node list, WITHOUT invoking a JIT backend or writing
+    /// any file. This is the extraction entry point for graph-based analysis,
+    /// classification, and duplicate detection.
+    ///
+    /// The passes used are identical to [`Compiler::compile`], so the returned
+    /// graph matches what the simulation would run. Pass the same
+    /// [`CompilerOptions`] you would use for `compile` (notably `wire_dot_out`
+    /// and `custom_io`) so the extracted graph is faithful to the simulated one.
+    pub fn compile_graph<W: World>(
+        world: &W,
+        bounds: (BlockPos, BlockPos),
+        options: CompilerOptions,
+        monitor: Arc<TaskMonitor>,
+    ) -> Vec<redpiler_graph::Node> {
+        let input = CompilerInput { world, bounds };
+        let pass_manager = make_default_pass_manager::<W>();
+        let graph = pass_manager.run_passes(&options, &input, monitor);
+        passes::lower_graph(&graph)
     }
 
     pub fn reset<W: World>(&mut self, world: &mut W, bounds: (BlockPos, BlockPos)) {

@@ -14,6 +14,8 @@ use mchprs_world::World;
 
 use crate::ril::DumpGraph;
 
+pub(crate) use export_graph::lower_graph;
+
 use super::compile_graph::CompileGraph;
 use super::task_monitor::TaskMonitor;
 use super::{CompilerInput, CompilerOptions};
