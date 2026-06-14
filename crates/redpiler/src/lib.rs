@@ -8,7 +8,7 @@ pub use backend::{BackendDispatcher, JITBackend};
 use mchprs_blocks::blocks::Block;
 use mchprs_blocks::BlockPos;
 use mchprs_world::{for_each_block_mut_optimized, TickEntry, World};
-use passes::make_default_pass_manager;
+use passes::{make_default_pass_manager, make_structural_pass_manager};
 use std::sync::Arc;
 use tracing::{debug, error, trace, warn};
 
@@ -195,6 +195,25 @@ impl Compiler {
     ) -> Vec<redpiler_graph::Node> {
         let input = CompilerInput { world, bounds };
         let pass_manager = make_default_pass_manager::<W>();
+        let graph = pass_manager.run_passes(&options, &input, monitor);
+        passes::lower_graph(&graph)
+    }
+
+    /// Run only the structural ("pre-fold") passes and return the AS-BUILT
+    /// analysis graph — WITHOUT ConstantFold/Coalesce and without a JIT backend.
+    /// Unlike [`Compiler::compile_graph`] (which mirrors the optimized simulation
+    /// graph), this preserves every component as its own node and keeps circuit
+    /// inputs as inputs. Pass `CompilerOptions { optimize: false, .. }` to also
+    /// keep redstone wires as individual nodes (near 1:1 with the voxels). For
+    /// analysis / graph→voxel mapping only — the simulation path is unchanged.
+    pub fn compile_graph_structural<W: World>(
+        world: &W,
+        bounds: (BlockPos, BlockPos),
+        options: CompilerOptions,
+        monitor: Arc<TaskMonitor>,
+    ) -> Vec<redpiler_graph::Node> {
+        let input = CompilerInput { world, bounds };
+        let pass_manager = make_structural_pass_manager::<W>();
         let graph = pass_manager.run_passes(&options, &input, monitor);
         passes::lower_graph(&graph)
     }

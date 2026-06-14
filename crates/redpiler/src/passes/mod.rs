@@ -40,6 +40,22 @@ pub const fn make_default_pass_manager<'w, W: World>() -> PassManager<'w, W> {
     ])
 }
 
+/// Structural ("pre-fold") pass pipeline for the ANALYSIS graph: runs only the
+/// graph-construction prefix and STOPS before ConstantFold / Coalesce, so the
+/// returned graph preserves the as-built structure — every component is its own
+/// node, inputs survive as inputs, nothing is folded or merged. With
+/// `CompilerOptions::optimize = false`, IdentifyNodes also keeps redstone wires
+/// as individual nodes. The simulation never uses this pipeline; it exists for
+/// graph→voxel analysis where the optimized graph discards too much structure.
+pub const fn make_structural_pass_manager<'w, W: World>() -> PassManager<'w, W> {
+    PassManager::new(&[
+        &identify_nodes::IdentifyNodes,
+        &input_search::InputSearch,
+        &clamp_weights::ClampWeights,
+        &dedup_links::DedupLinks,
+    ])
+}
+
 pub trait AnalysisInfo: Any {}
 
 #[derive(Default)]
