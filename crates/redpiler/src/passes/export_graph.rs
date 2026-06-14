@@ -78,6 +78,20 @@ fn convert_node(
                 id,
             )
         }),
+        aliased_blocks: node
+            .aliased_blocks
+            .iter()
+            .map(|(pos, id)| {
+                (
+                    BlockPos {
+                        x: pos.x,
+                        y: pos.y,
+                        z: pos.z,
+                    },
+                    *id,
+                )
+            })
+            .collect(),
         state: NodeState {
             output_strength: node.state.output_strength,
             powered: node.state.powered,
