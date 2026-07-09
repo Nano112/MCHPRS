@@ -5,9 +5,10 @@ use crate::passes::{AnalysisInfos, AnalysisUsage, Pass};
 use crate::{CompilerInput, CompilerOptions};
 use itertools::Itertools;
 use mchprs_blocks::blocks::ComparatorMode as CComparatorMode;
+use mchprs_blocks::BlockFacing;
 use mchprs_world::World;
 use redpiler_graph::{
-    serialize, BlockPos, ComparatorMode, Link, LinkType, Node, NodeState, NodeType,
+    serialize, BlockPos, ComparatorMode, Facing, Link, LinkType, Node, NodeState, NodeType,
 };
 use rustc_hash::FxHashMap;
 use std::fs;
@@ -66,6 +67,16 @@ fn convert_node(
             CNodeType::Wire => NodeType::Wire,
             CNodeType::Constant => NodeType::Constant,
             CNodeType::NoteBlock { .. } => NodeType::NoteBlock,
+            CNodeType::Observer { facing } => NodeType::Observer(match facing {
+                BlockFacing::North => Facing::North,
+                BlockFacing::East => Facing::East,
+                BlockFacing::South => Facing::South,
+                BlockFacing::West => Facing::West,
+                BlockFacing::Up => Facing::Up,
+                BlockFacing::Down => Facing::Down,
+            }),
+            CNodeType::PoweredRail => NodeType::PoweredRail,
+            CNodeType::ActivatorRail => NodeType::ActivatorRail,
         },
         block: node
             .block

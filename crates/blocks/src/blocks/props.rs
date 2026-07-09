@@ -317,3 +317,118 @@ impl BlockTransform for BlockAxis {
     }
     fn flip(&mut self, _dir: FlipDirection) {}
 }
+
+/// The track shape of powered rail, activator rail, and detector rail: always a
+/// straight segment, either flat or ascending a slope, never a curve.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum StraightRailShape {
+    #[default]
+    NorthSouth,
+    EastWest,
+    AscendingEast,
+    AscendingWest,
+    AscendingNorth,
+    AscendingSouth,
+}
+
+impl BlockTransform for StraightRailShape {
+    fn rotate90(&mut self) {
+        *self = match *self {
+            Self::NorthSouth => Self::EastWest,
+            Self::EastWest => Self::NorthSouth,
+            Self::AscendingNorth => Self::AscendingEast,
+            Self::AscendingEast => Self::AscendingSouth,
+            Self::AscendingSouth => Self::AscendingWest,
+            Self::AscendingWest => Self::AscendingNorth,
+        }
+    }
+
+    fn flip(&mut self, dir: FlipDirection) {
+        *self = match (dir, *self) {
+            (FlipDirection::FlipX, Self::AscendingEast) => Self::AscendingWest,
+            (FlipDirection::FlipX, Self::AscendingWest) => Self::AscendingEast,
+            (FlipDirection::FlipZ, Self::AscendingNorth) => Self::AscendingSouth,
+            (FlipDirection::FlipZ, Self::AscendingSouth) => Self::AscendingNorth,
+            (_, x) => x,
+        }
+    }
+}
+
+/// The track shape of a plain rail: a straight segment (flat or ascending, like
+/// [`StraightRailShape`]) or a curve connecting two perpendicular directions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum RailShape {
+    #[default]
+    NorthSouth,
+    EastWest,
+    AscendingEast,
+    AscendingWest,
+    AscendingNorth,
+    AscendingSouth,
+    SouthEast,
+    SouthWest,
+    NorthWest,
+    NorthEast,
+}
+
+impl BlockTransform for RailShape {
+    fn rotate90(&mut self) {
+        *self = match *self {
+            Self::NorthSouth => Self::EastWest,
+            Self::EastWest => Self::NorthSouth,
+            Self::AscendingNorth => Self::AscendingEast,
+            Self::AscendingEast => Self::AscendingSouth,
+            Self::AscendingSouth => Self::AscendingWest,
+            Self::AscendingWest => Self::AscendingNorth,
+            Self::SouthEast => Self::SouthWest,
+            Self::SouthWest => Self::NorthWest,
+            Self::NorthWest => Self::NorthEast,
+            Self::NorthEast => Self::SouthEast,
+        }
+    }
+
+    fn flip(&mut self, dir: FlipDirection) {
+        *self = match (dir, *self) {
+            (FlipDirection::FlipX, Self::AscendingEast) => Self::AscendingWest,
+            (FlipDirection::FlipX, Self::AscendingWest) => Self::AscendingEast,
+            (FlipDirection::FlipX, Self::SouthEast) => Self::SouthWest,
+            (FlipDirection::FlipX, Self::SouthWest) => Self::SouthEast,
+            (FlipDirection::FlipX, Self::NorthWest) => Self::NorthEast,
+            (FlipDirection::FlipX, Self::NorthEast) => Self::NorthWest,
+            (FlipDirection::FlipZ, Self::AscendingNorth) => Self::AscendingSouth,
+            (FlipDirection::FlipZ, Self::AscendingSouth) => Self::AscendingNorth,
+            (FlipDirection::FlipZ, Self::SouthEast) => Self::NorthEast,
+            (FlipDirection::FlipZ, Self::NorthEast) => Self::SouthEast,
+            (FlipDirection::FlipZ, Self::SouthWest) => Self::NorthWest,
+            (FlipDirection::FlipZ, Self::NorthWest) => Self::SouthWest,
+            (_, x) => x,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, BlockProperty, BlockTransform)]
+pub struct Rail {
+    pub shape: RailShape,
+    pub waterlogged: bool,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, BlockProperty, BlockTransform)]
+pub struct PoweredRail {
+    pub shape: StraightRailShape,
+    pub powered: bool,
+    pub waterlogged: bool,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, BlockProperty, BlockTransform)]
+pub struct ActivatorRail {
+    pub shape: StraightRailShape,
+    pub powered: bool,
+    pub waterlogged: bool,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, BlockProperty, BlockTransform)]
+pub struct DetectorRail {
+    pub shape: StraightRailShape,
+    pub powered: bool,
+    pub waterlogged: bool,
+}

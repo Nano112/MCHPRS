@@ -1,5 +1,5 @@
 use mchprs_blocks::blocks::{ComparatorMode, Instrument};
-use mchprs_blocks::BlockPos;
+use mchprs_blocks::{BlockFacing, BlockPos};
 // use petgraph::stable_graph::{NodeIndex, StableGraph};
 use smallvec::SmallVec;
 use stable_graph::{NodeIndex, StableGraph};
@@ -32,6 +32,11 @@ pub enum NodeType {
         instrument: Instrument,
         note: u8,
     },
+    Observer {
+        facing: BlockFacing,
+    },
+    PoweredRail,
+    ActivatorRail,
 }
 
 impl NodeType {
@@ -45,7 +50,11 @@ impl NodeType {
     pub fn is_normally_output(&self) -> bool {
         matches!(
             self,
-            NodeType::Trapdoor | NodeType::Lamp | NodeType::NoteBlock { .. }
+            NodeType::Trapdoor
+                | NodeType::Lamp
+                | NodeType::NoteBlock { .. }
+                | NodeType::PoweredRail
+                | NodeType::ActivatorRail
         )
     }
 }

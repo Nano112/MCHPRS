@@ -243,7 +243,10 @@ impl SSRangeAnalysis {
             | NodeType::Torch
             | NodeType::NoteBlock { .. }
             | NodeType::Lamp
-            | NodeType::Trapdoor => {
+            | NodeType::Trapdoor
+            | NodeType::Observer { .. }
+            | NodeType::PoweredRail
+            | NodeType::ActivatorRail => {
                 if matches!(ty, NodeType::Repeater { .. })
                     && state.repeater_locked
                     && side_range.low > 0
@@ -328,7 +331,10 @@ impl SSRangeAnalysis {
             | NodeType::Lamp
             | NodeType::Trapdoor
             | NodeType::Wire
-            | NodeType::NoteBlock { .. } => SSRange::constant(0),
+            | NodeType::NoteBlock { .. }
+            | NodeType::Observer { .. }
+            | NodeType::PoweredRail
+            | NodeType::ActivatorRail => SSRange::constant(0),
             NodeType::Torch => SSRange::constant(15),
             NodeType::Constant => SSRange::constant(state.output_strength),
             NodeType::Button | NodeType::Lever | NodeType::PressurePlate => SSRange::FULL,

@@ -422,6 +422,9 @@ impl fmt::Display for DirectBackend {
                 NodeType::Wire => "Wire".to_string(),
                 NodeType::Constant => format!("Constant({})", node.output_power),
                 NodeType::NoteBlock { .. } => "NoteBlock".to_string(),
+                NodeType::Observer { facing } => format!("Observer({:?})", facing),
+                NodeType::PoweredRail => "PoweredRail".to_string(),
+                NodeType::ActivatorRail => "ActivatorRail".to_string(),
             };
             let pos = if !self.blocks[id].is_empty() {
                 let mut string = String::new();

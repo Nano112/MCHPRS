@@ -134,6 +134,9 @@ fn compile_node(
             ));
             NodeType::NoteBlock { noteblock_id }
         }
+        CNodeType::Observer { facing } => NodeType::Observer { facing: *facing },
+        CNodeType::PoweredRail => NodeType::PoweredRail,
+        CNodeType::ActivatorRail => NodeType::ActivatorRail,
     };
 
     Node {

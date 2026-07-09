@@ -188,6 +188,25 @@ fn dump_node(f: &mut impl fmt::Write, ctx: &FmtContext<'_>) -> fmt::Result {
                 inputs.default_inputs()
             )
         }
+        NodeType::Observer { facing } => write!(
+            f,
+            "observer {}, {}, {}",
+            facing,
+            node.state.powered,
+            inputs.default_inputs()
+        ),
+        NodeType::PoweredRail => write!(
+            f,
+            "powered_rail {}, {}",
+            node.state.powered,
+            inputs.default_inputs()
+        ),
+        NodeType::ActivatorRail => write!(
+            f,
+            "activator_rail {}, {}",
+            node.state.powered,
+            inputs.default_inputs()
+        ),
     }?;
 
     if !node.block.is_empty() {

@@ -252,6 +252,46 @@ pub fn get_state_for_placement(
             eye: false,
             facing: context.player.get_direction().opposite(),
         },
+        Item::Observer => Block::Observer {
+            facing: context.player.get_facing(),
+            powered: false,
+        },
+        Item::Rail => Block::Rail(redstone::rail::rail_get_state_for_placement(
+            world,
+            pos,
+            context.player.get_direction(),
+        )),
+        Item::PoweredRail => {
+            let rail = redstone::rail::powered_rail_get_state_for_placement(
+                world,
+                pos,
+                context.player.get_direction(),
+            );
+            let powered =
+                redstone::rail::is_powered(world, pos, rail.shape, redstone::rail::RailKind::Powered);
+            Block::PoweredRail(PoweredRail { powered, ..rail })
+        }
+        Item::ActivatorRail => {
+            let rail = redstone::rail::activator_rail_get_state_for_placement(
+                world,
+                pos,
+                context.player.get_direction(),
+            );
+            let powered = redstone::rail::is_powered(
+                world,
+                pos,
+                rail.shape,
+                redstone::rail::RailKind::Activator,
+            );
+            Block::ActivatorRail(ActivatorRail { powered, ..rail })
+        }
+        Item::DetectorRail => {
+            Block::DetectorRail(redstone::rail::detector_rail_get_state_for_placement(
+                world,
+                pos,
+                context.player.get_direction(),
+            ))
+        }
         _ => Block::Air,
     };
     let block = simple_block.unwrap_or(block);
@@ -347,6 +387,10 @@ pub fn is_valid_position(block: Block, world: &impl World, pos: BlockPos) -> boo
             | Block::Comparator(_)
             | Block::Repeater(_)
             | Block::RedstoneTorch { .. }
+            | Block::Rail(_)
+            | Block::PoweredRail(_)
+            | Block::ActivatorRail(_)
+            | Block::DetectorRail(_)
             | Block::Lever {
                 face: LeverFace::Floor,
                 ..
@@ -406,6 +450,26 @@ pub fn change(block: Block, world: &mut impl World, pos: BlockPos, direction: Bl
         let new_state = redstone::wire::on_neighbor_changed(wire, world, pos, direction);
         if world.set_block(pos, Block::RedstoneWire(new_state)) {
             redstone::update_wire_neighbors(world, pos);
+        }
+    } else if let Block::Rail(rail) = block {
+        let new_state = redstone::rail::rail_on_neighbor_changed(rail, world, pos);
+        if world.set_block(pos, Block::Rail(new_state)) {
+            redstone::update_surrounding_blocks(world, pos);
+        }
+    } else if let Block::PoweredRail(rail) = block {
+        let new_state = redstone::rail::powered_rail_on_neighbor_changed(rail, world, pos);
+        if world.set_block(pos, Block::PoweredRail(new_state)) {
+            redstone::update_surrounding_blocks(world, pos);
+        }
+    } else if let Block::ActivatorRail(rail) = block {
+        let new_state = redstone::rail::activator_rail_on_neighbor_changed(rail, world, pos);
+        if world.set_block(pos, Block::ActivatorRail(new_state)) {
+            redstone::update_surrounding_blocks(world, pos);
+        }
+    } else if let Block::DetectorRail(rail) = block {
+        let new_state = redstone::rail::detector_rail_on_neighbor_changed(rail, world, pos);
+        if world.set_block(pos, Block::DetectorRail(new_state)) {
+            redstone::update_surrounding_blocks(world, pos);
         }
     }
 }

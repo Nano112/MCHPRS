@@ -242,6 +242,11 @@ fn identify_block<W: World>(
             NodeType::Constant,
             NodeState::ss(comparator::get_override(block, world, pos)),
         ),
+        Block::Observer { facing, powered } => {
+            (NodeType::Observer { facing }, NodeState::simple(powered))
+        }
+        Block::PoweredRail(rail) => (NodeType::PoweredRail, NodeState::simple(rail.powered)),
+        Block::ActivatorRail(rail) => (NodeType::ActivatorRail, NodeState::simple(rail.powered)),
         _ => return None,
     };
     Some((ty, state))

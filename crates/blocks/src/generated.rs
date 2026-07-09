@@ -130,6 +130,10 @@ pub enum Block {
         facing: BlockFacing,
         powered: bool,
     },
+    Rail(Rail),
+    PoweredRail(PoweredRail),
+    ActivatorRail(ActivatorRail),
+    DetectorRail(DetectorRail),
     SeaPickle {
         pickles: u8,
         waterlogged: bool,
@@ -347,6 +351,10 @@ impl Block {
             Block::Comparator(_) => "minecraft:comparator",
             Block::RedstoneBlock => "minecraft:redstone_block",
             Block::Observer { .. } => "minecraft:observer",
+            Block::Rail(_) => "minecraft:rail",
+            Block::PoweredRail(_) => "minecraft:powered_rail",
+            Block::ActivatorRail(_) => "minecraft:activator_rail",
+            Block::DetectorRail(_) => "minecraft:detector_rail",
             Block::SeaPickle { .. } => "minecraft:sea_pickle",
             Block::Target { .. } => "minecraft:target",
             Block::OakPressurePlate { .. } => "minecraft:oak_pressure_plate",
@@ -596,6 +604,25 @@ impl Block {
                 facing: BlockFacing::South,
                 powered: false,
             },
+            "minecraft:rail" => Block::Rail(Rail {
+                shape: RailShape::NorthSouth,
+                waterlogged: false,
+            }),
+            "minecraft:powered_rail" => Block::PoweredRail(PoweredRail {
+                powered: false,
+                shape: StraightRailShape::NorthSouth,
+                waterlogged: false,
+            }),
+            "minecraft:activator_rail" => Block::ActivatorRail(ActivatorRail {
+                powered: false,
+                shape: StraightRailShape::NorthSouth,
+                waterlogged: false,
+            }),
+            "minecraft:detector_rail" => Block::DetectorRail(DetectorRail {
+                powered: false,
+                shape: StraightRailShape::NorthSouth,
+                waterlogged: false,
+            }),
             "minecraft:sea_pickle" => Block::SeaPickle {
                 pickles: 1,
                 waterlogged: true,
@@ -1183,6 +1210,37 @@ impl Block {
                 <BlockFacing as BlockProperty>::decode(facing, &props, "facing");
                 <bool as BlockProperty>::decode(powered, &props, "powered");
             }
+            Block::Rail(Rail { shape, waterlogged }) => {
+                <RailShape as BlockProperty>::decode(shape, &props, "shape");
+                <bool as BlockProperty>::decode(waterlogged, &props, "waterlogged");
+            }
+            Block::PoweredRail(PoweredRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => {
+                <bool as BlockProperty>::decode(powered, &props, "powered");
+                <StraightRailShape as BlockProperty>::decode(shape, &props, "shape");
+                <bool as BlockProperty>::decode(waterlogged, &props, "waterlogged");
+            }
+            Block::ActivatorRail(ActivatorRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => {
+                <bool as BlockProperty>::decode(powered, &props, "powered");
+                <StraightRailShape as BlockProperty>::decode(shape, &props, "shape");
+                <bool as BlockProperty>::decode(waterlogged, &props, "waterlogged");
+            }
+            Block::DetectorRail(DetectorRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => {
+                <bool as BlockProperty>::decode(powered, &props, "powered");
+                <StraightRailShape as BlockProperty>::decode(shape, &props, "shape");
+                <bool as BlockProperty>::decode(waterlogged, &props, "waterlogged");
+            }
             Block::SeaPickle {
                 pickles,
                 waterlogged,
@@ -1610,6 +1668,37 @@ impl Block {
                 <BlockFacing as BlockProperty>::encode(*facing, &mut props, "facing");
                 <bool as BlockProperty>::encode(*powered, &mut props, "powered");
             }
+            Block::Rail(Rail { shape, waterlogged }) => {
+                <RailShape as BlockProperty>::encode(*shape, &mut props, "shape");
+                <bool as BlockProperty>::encode(*waterlogged, &mut props, "waterlogged");
+            }
+            Block::PoweredRail(PoweredRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => {
+                <bool as BlockProperty>::encode(*powered, &mut props, "powered");
+                <StraightRailShape as BlockProperty>::encode(*shape, &mut props, "shape");
+                <bool as BlockProperty>::encode(*waterlogged, &mut props, "waterlogged");
+            }
+            Block::ActivatorRail(ActivatorRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => {
+                <bool as BlockProperty>::encode(*powered, &mut props, "powered");
+                <StraightRailShape as BlockProperty>::encode(*shape, &mut props, "shape");
+                <bool as BlockProperty>::encode(*waterlogged, &mut props, "waterlogged");
+            }
+            Block::DetectorRail(DetectorRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => {
+                <bool as BlockProperty>::encode(*powered, &mut props, "powered");
+                <StraightRailShape as BlockProperty>::encode(*shape, &mut props, "shape");
+                <bool as BlockProperty>::encode(*waterlogged, &mut props, "waterlogged");
+            }
             Block::SeaPickle {
                 pickles,
                 waterlogged,
@@ -2031,6 +2120,37 @@ impl Block {
                 <BlockFacing as BlockTransform>::rotate(facing, amt);
                 <bool as BlockTransform>::rotate(powered, amt);
             }
+            Block::Rail(Rail { shape, waterlogged }) => {
+                <RailShape as BlockTransform>::rotate(shape, amt);
+                <bool as BlockTransform>::rotate(waterlogged, amt);
+            }
+            Block::PoweredRail(PoweredRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => {
+                <bool as BlockTransform>::rotate(powered, amt);
+                <StraightRailShape as BlockTransform>::rotate(shape, amt);
+                <bool as BlockTransform>::rotate(waterlogged, amt);
+            }
+            Block::ActivatorRail(ActivatorRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => {
+                <bool as BlockTransform>::rotate(powered, amt);
+                <StraightRailShape as BlockTransform>::rotate(shape, amt);
+                <bool as BlockTransform>::rotate(waterlogged, amt);
+            }
+            Block::DetectorRail(DetectorRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => {
+                <bool as BlockTransform>::rotate(powered, amt);
+                <StraightRailShape as BlockTransform>::rotate(shape, amt);
+                <bool as BlockTransform>::rotate(waterlogged, amt);
+            }
             Block::SeaPickle {
                 pickles,
                 waterlogged,
@@ -2451,6 +2571,37 @@ impl Block {
                 <BlockFacing as BlockTransform>::flip(facing, dir);
                 <bool as BlockTransform>::flip(powered, dir);
             }
+            Block::Rail(Rail { shape, waterlogged }) => {
+                <RailShape as BlockTransform>::flip(shape, dir);
+                <bool as BlockTransform>::flip(waterlogged, dir);
+            }
+            Block::PoweredRail(PoweredRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => {
+                <bool as BlockTransform>::flip(powered, dir);
+                <StraightRailShape as BlockTransform>::flip(shape, dir);
+                <bool as BlockTransform>::flip(waterlogged, dir);
+            }
+            Block::ActivatorRail(ActivatorRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => {
+                <bool as BlockTransform>::flip(powered, dir);
+                <StraightRailShape as BlockTransform>::flip(shape, dir);
+                <bool as BlockTransform>::flip(waterlogged, dir);
+            }
+            Block::DetectorRail(DetectorRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => {
+                <bool as BlockTransform>::flip(powered, dir);
+                <StraightRailShape as BlockTransform>::flip(shape, dir);
+                <bool as BlockTransform>::flip(waterlogged, dir);
+            }
             Block::SeaPickle {
                 pickles,
                 waterlogged,
@@ -2789,6 +2940,24 @@ impl Block {
             Block::Observer { facing, powered } => {
                 12550 + (facing.get_id()) * 2 + (!powered as u32)
             }
+            Block::Rail(Rail { shape, waterlogged }) => {
+                4662 + (shape.get_id()) * 2 + (!waterlogged as u32)
+            }
+            Block::PoweredRail(PoweredRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => 1944 + (!powered as u32) * 12 + (shape.get_id()) * 2 + (!waterlogged as u32),
+            Block::ActivatorRail(ActivatorRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => 9320 + (!powered as u32) * 12 + (shape.get_id()) * 2 + (!waterlogged as u32),
+            Block::DetectorRail(DetectorRail {
+                powered,
+                shape,
+                waterlogged,
+            }) => 1968 + (!powered as u32) * 12 + (shape.get_id()) * 2 + (!waterlogged as u32),
             Block::SeaPickle {
                 pickles,
                 waterlogged,
@@ -3174,6 +3343,37 @@ impl Block {
                     facing: BlockFacing::from_id(((id / 2) % 6)),
                     powered: (((id) % 2) & 1) == 0,
                 }
+            }
+            4662..4682 => {
+                id -= 4662;
+                Block::Rail(Rail {
+                    shape: RailShape::from_id(((id / 2) % 10)),
+                    waterlogged: (((id) % 2) & 1) == 0,
+                })
+            }
+            1944..1968 => {
+                id -= 1944;
+                Block::PoweredRail(PoweredRail {
+                    powered: (((id / 12) % 2) & 1) == 0,
+                    shape: StraightRailShape::from_id(((id / 2) % 6)),
+                    waterlogged: (((id) % 2) & 1) == 0,
+                })
+            }
+            9320..9344 => {
+                id -= 9320;
+                Block::ActivatorRail(ActivatorRail {
+                    powered: (((id / 12) % 2) & 1) == 0,
+                    shape: StraightRailShape::from_id(((id / 2) % 6)),
+                    waterlogged: (((id) % 2) & 1) == 0,
+                })
+            }
+            1968..1992 => {
+                id -= 1968;
+                Block::DetectorRail(DetectorRail {
+                    powered: (((id / 12) % 2) & 1) == 0,
+                    shape: StraightRailShape::from_id(((id / 2) % 6)),
+                    waterlogged: (((id) % 2) & 1) == 0,
+                })
             }
             12933..12941 => {
                 id -= 12933;
@@ -3935,6 +4135,38 @@ impl FromStr for ComparatorMode {
         })
     }
 }
+impl FromStr for RailShape {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "north_south" => RailShape::NorthSouth,
+            "east_west" => RailShape::EastWest,
+            "ascending_east" => RailShape::AscendingEast,
+            "ascending_west" => RailShape::AscendingWest,
+            "ascending_north" => RailShape::AscendingNorth,
+            "ascending_south" => RailShape::AscendingSouth,
+            "south_east" => RailShape::SouthEast,
+            "south_west" => RailShape::SouthWest,
+            "north_west" => RailShape::NorthWest,
+            "north_east" => RailShape::NorthEast,
+            _ => return Err(()),
+        })
+    }
+}
+impl FromStr for StraightRailShape {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "north_south" => StraightRailShape::NorthSouth,
+            "east_west" => StraightRailShape::EastWest,
+            "ascending_east" => StraightRailShape::AscendingEast,
+            "ascending_west" => StraightRailShape::AscendingWest,
+            "ascending_north" => StraightRailShape::AscendingNorth,
+            "ascending_south" => StraightRailShape::AscendingSouth,
+            _ => return Err(()),
+        })
+    }
+}
 impl std::fmt::Display for BlockDirection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
@@ -4046,6 +4278,34 @@ impl std::fmt::Display for ComparatorMode {
         f.write_str(match self {
             ComparatorMode::Compare => "compare",
             ComparatorMode::Subtract => "subtract",
+        })
+    }
+}
+impl std::fmt::Display for RailShape {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            RailShape::NorthSouth => "north_south",
+            RailShape::EastWest => "east_west",
+            RailShape::AscendingEast => "ascending_east",
+            RailShape::AscendingWest => "ascending_west",
+            RailShape::AscendingNorth => "ascending_north",
+            RailShape::AscendingSouth => "ascending_south",
+            RailShape::SouthEast => "south_east",
+            RailShape::SouthWest => "south_west",
+            RailShape::NorthWest => "north_west",
+            RailShape::NorthEast => "north_east",
+        })
+    }
+}
+impl std::fmt::Display for StraightRailShape {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            StraightRailShape::NorthSouth => "north_south",
+            StraightRailShape::EastWest => "east_west",
+            StraightRailShape::AscendingEast => "ascending_east",
+            StraightRailShape::AscendingWest => "ascending_west",
+            StraightRailShape::AscendingNorth => "ascending_north",
+            StraightRailShape::AscendingSouth => "ascending_south",
         })
     }
 }
@@ -4203,6 +4463,42 @@ impl ComparatorMode {
         }
     }
 }
+impl RailShape {
+    fn get_id(self) -> u32 {
+        self as u32
+    }
+    fn from_id(id: u32) -> Self {
+        match id {
+            0 => RailShape::NorthSouth,
+            1 => RailShape::EastWest,
+            2 => RailShape::AscendingEast,
+            3 => RailShape::AscendingWest,
+            4 => RailShape::AscendingNorth,
+            5 => RailShape::AscendingSouth,
+            6 => RailShape::SouthEast,
+            7 => RailShape::SouthWest,
+            8 => RailShape::NorthWest,
+            9 => RailShape::NorthEast,
+            id => unreachable!(),
+        }
+    }
+}
+impl StraightRailShape {
+    fn get_id(self) -> u32 {
+        self as u32
+    }
+    fn from_id(id: u32) -> Self {
+        match id {
+            0 => StraightRailShape::NorthSouth,
+            1 => StraightRailShape::EastWest,
+            2 => StraightRailShape::AscendingEast,
+            3 => StraightRailShape::AscendingWest,
+            4 => StraightRailShape::AscendingNorth,
+            5 => StraightRailShape::AscendingSouth,
+            id => unreachable!(),
+        }
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Item {
     Stone,
@@ -4228,6 +4524,10 @@ pub enum Item {
     Comparator,
     RedstoneBlock,
     Observer,
+    Rail,
+    PoweredRail,
+    ActivatorRail,
+    DetectorRail,
     SeaPickle,
     Target,
     OakPressurePlate,
@@ -4368,6 +4668,10 @@ impl Item {
             Item::Comparator => 660,
             Item::RedstoneBlock => 658,
             Item::Observer => 665,
+            Item::Rail => 762,
+            Item::PoweredRail => 760,
+            Item::ActivatorRail => 763,
+            Item::DetectorRail => 761,
             Item::SeaPickle => 200,
             Item::Target => 670,
             Item::OakPressurePlate => 698,
@@ -4508,6 +4812,10 @@ impl Item {
             660 => Item::Comparator,
             658 => Item::RedstoneBlock,
             665 => Item::Observer,
+            762 => Item::Rail,
+            760 => Item::PoweredRail,
+            763 => Item::ActivatorRail,
+            761 => Item::DetectorRail,
             200 => Item::SeaPickle,
             670 => Item::Target,
             698 => Item::OakPressurePlate,
@@ -4648,6 +4956,10 @@ impl Item {
             Item::Comparator => "minecraft:comparator",
             Item::RedstoneBlock => "minecraft:redstone_block",
             Item::Observer => "minecraft:observer",
+            Item::Rail => "minecraft:rail",
+            Item::PoweredRail => "minecraft:powered_rail",
+            Item::ActivatorRail => "minecraft:activator_rail",
+            Item::DetectorRail => "minecraft:detector_rail",
             Item::SeaPickle => "minecraft:sea_pickle",
             Item::Target => "minecraft:target",
             Item::OakPressurePlate => "minecraft:oak_pressure_plate",
@@ -4788,6 +5100,10 @@ impl Item {
             "minecraft:comparator" => Item::Comparator,
             "minecraft:redstone_block" => Item::RedstoneBlock,
             "minecraft:observer" => Item::Observer,
+            "minecraft:rail" => Item::Rail,
+            "minecraft:powered_rail" => Item::PoweredRail,
+            "minecraft:activator_rail" => Item::ActivatorRail,
+            "minecraft:detector_rail" => Item::DetectorRail,
             "minecraft:sea_pickle" => Item::SeaPickle,
             "minecraft:target" => Item::Target,
             "minecraft:oak_pressure_plate" => Item::OakPressurePlate,
@@ -5014,6 +5330,10 @@ impl Item {
             Item::Comparator => true,
             Item::RedstoneBlock => true,
             Item::Observer => true,
+            Item::Rail => true,
+            Item::PoweredRail => true,
+            Item::ActivatorRail => true,
+            Item::DetectorRail => true,
             Item::SeaPickle => true,
             Item::Target => true,
             Item::OakPressurePlate => true,
@@ -5154,6 +5474,10 @@ impl Item {
             Item::Comparator => 64,
             Item::RedstoneBlock => 64,
             Item::Observer => 64,
+            Item::Rail => 64,
+            Item::PoweredRail => 64,
+            Item::ActivatorRail => 64,
+            Item::DetectorRail => 64,
             Item::SeaPickle => 64,
             Item::Target => 64,
             Item::OakPressurePlate => 64,

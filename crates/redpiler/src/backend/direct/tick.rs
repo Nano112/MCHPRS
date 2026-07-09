@@ -66,6 +66,14 @@ impl DirectBackend {
                     self.set_node(node_id, false, 0);
                 }
             }
+            NodeType::Observer { .. } => {
+                if node.powered {
+                    self.set_node(node_id, false, 0);
+                } else {
+                    schedule_tick(&mut self.scheduler, node_id, node, 2, TickPriority::Normal);
+                    self.set_node(node_id, true, 15);
+                }
+            }
             _ => {} //unreachable!("Node {:?} should not be ticked!", node.ty),
         }
     }

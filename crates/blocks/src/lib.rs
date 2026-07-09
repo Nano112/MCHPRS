@@ -233,7 +233,7 @@ impl BlockDirection {
     }
 }
 
-#[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub enum BlockFacing {
     North,
     East,
@@ -276,6 +276,28 @@ impl BlockFacing {
             South => East,
             East => North,
             other => other,
+        }
+    }
+
+    pub fn block_face(self) -> BlockFace {
+        match self {
+            BlockFacing::North => BlockFace::North,
+            BlockFacing::South => BlockFace::South,
+            BlockFacing::East => BlockFace::East,
+            BlockFacing::West => BlockFace::West,
+            BlockFacing::Up => BlockFace::Top,
+            BlockFacing::Down => BlockFace::Bottom,
+        }
+    }
+
+    pub fn opposite(self) -> BlockFacing {
+        match self {
+            BlockFacing::North => BlockFacing::South,
+            BlockFacing::South => BlockFacing::North,
+            BlockFacing::East => BlockFacing::West,
+            BlockFacing::West => BlockFacing::East,
+            BlockFacing::Up => BlockFacing::Down,
+            BlockFacing::Down => BlockFacing::Up,
         }
     }
 }

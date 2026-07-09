@@ -1,4 +1,5 @@
 use mchprs_blocks::blocks::ComparatorMode;
+use mchprs_blocks::BlockFacing;
 use std::num::NonZeroU8;
 use std::ops::{Index, IndexMut};
 
@@ -162,6 +163,11 @@ pub enum NodeType {
     NoteBlock {
         noteblock_id: u16,
     },
+    Observer {
+        facing: BlockFacing,
+    },
+    PoweredRail,
+    ActivatorRail,
 }
 
 #[repr(align(16))]

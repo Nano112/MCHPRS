@@ -23,6 +23,16 @@ pub enum ComparatorMode {
     Subtract,
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
+pub enum Facing {
+    North,
+    East,
+    South,
+    West,
+    Up,
+    Down,
+}
+
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct Link {
     pub ty: LinkType,
@@ -43,6 +53,9 @@ pub enum NodeType {
     Wire,
     Constant,
     NoteBlock,
+    Observer(Facing),
+    PoweredRail,
+    ActivatorRail,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]

@@ -1,5 +1,8 @@
-use mchprs_blocks::blocks::{Block, Comparator, ComparatorMode, LeverFace, Repeater};
-use mchprs_blocks::{BlockDirection, BlockPos};
+use mchprs_blocks::blocks::{
+    ActivatorRail, Block, Comparator, ComparatorMode, LeverFace, PoweredRail, Repeater,
+    StraightRailShape,
+};
+use mchprs_blocks::{BlockDirection, BlockFacing, BlockPos};
 use mchprs_redpiler::{BackendVariant, Compiler, CompilerOptions};
 use mchprs_redstone::wire::make_cross;
 use mchprs_world::testing::TestWorld;
@@ -120,6 +123,9 @@ fn is_block_powered(block: Block) -> Option<bool> {
         Block::RedstoneLamp { lit } => lit,
         Block::IronTrapdoor { powered, .. } => powered,
         Block::NoteBlock { powered, .. } => powered,
+        Block::Observer { powered, .. } => powered,
+        Block::PoweredRail(rail) => rail.powered,
+        Block::ActivatorRail(rail) => rail.powered,
         _ => return None,
     })
 }
@@ -207,6 +213,45 @@ pub fn make_comparator(
             mode,
             facing,
             ..Default::default()
+        }),
+    );
+}
+
+/// Creates an observer at `observer_pos`, watching the block at `facing`, with a block of
+/// sandstone below it
+pub fn make_observer(world: &mut TestWorld, observer_pos: BlockPos, facing: BlockFacing) {
+    place_on_block(
+        world,
+        observer_pos,
+        Block::Observer {
+            facing,
+            powered: false,
+        },
+    );
+}
+
+/// Creates a powered rail at `rail_pos` with a block of sandstone below it
+pub fn make_powered_rail(world: &mut TestWorld, rail_pos: BlockPos, shape: StraightRailShape) {
+    place_on_block(
+        world,
+        rail_pos,
+        Block::PoweredRail(PoweredRail {
+            shape,
+            powered: false,
+            waterlogged: false,
+        }),
+    );
+}
+
+/// Creates an activator rail at `rail_pos` with a block of sandstone below it
+pub fn make_activator_rail(world: &mut TestWorld, rail_pos: BlockPos, shape: StraightRailShape) {
+    place_on_block(
+        world,
+        rail_pos,
+        Block::ActivatorRail(ActivatorRail {
+            shape,
+            powered: false,
+            waterlogged: false,
         }),
     );
 }

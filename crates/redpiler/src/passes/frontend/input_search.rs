@@ -6,7 +6,7 @@
 use crate::compile_graph::{CompileGraph, CompileLink, LinkType, NodeIdx};
 use crate::passes::{AnalysisInfos, Pass};
 use crate::{CompilerInput, CompilerOptions};
-use mchprs_blocks::blocks::{Block, LeverFace};
+use mchprs_blocks::blocks::{Block, LeverFace, StraightRailShape};
 use mchprs_blocks::{BlockDirection, BlockFace, BlockPos};
 use mchprs_redstone::{self, comparator, wire};
 use mchprs_world::World;
@@ -549,7 +549,82 @@ impl<'a, W: World> InputSearchState<'a, W> {
                     );
                 }
             }
+            Block::Observer { facing, .. } => {
+                // The observer's only input is a trigger edge from the node it watches
+                // (its "lens" face) — any propagation reaching this node means that node's
+                // power/state changed, which is what schedules the pulse at simulation time.
+                let watched_pos = pos.offset(facing.block_face());
+                if let Some(&watched_node) = self.pos_map.get(&watched_pos) {
+                    self.graph.add_edge(watched_node, id, CompileLink::default(0));
+                }
+            }
+            Block::PoweredRail(rail) => {
+                for face in &BlockFace::values() {
+                    let neighbor_pos = pos.offset(*face);
+                    let neighbor_block = self.block_lookup_cache.get_block(neighbor_pos);
+                    self.get_redstone_links(
+                        neighbor_block,
+                        *face,
+                        neighbor_pos,
+                        LinkType::Default,
+                        0,
+                        id,
+                        true,
+                    );
+                }
+                self.search_rail_chain(id, pos, rail.shape, mchprs_redstone::rail::RailKind::Powered);
+            }
+            Block::ActivatorRail(rail) => {
+                for face in &BlockFace::values() {
+                    let neighbor_pos = pos.offset(*face);
+                    let neighbor_block = self.block_lookup_cache.get_block(neighbor_pos);
+                    self.get_redstone_links(
+                        neighbor_block,
+                        *face,
+                        neighbor_pos,
+                        LinkType::Default,
+                        0,
+                        id,
+                        true,
+                    );
+                }
+                self.search_rail_chain(id, pos, rail.shape, mchprs_redstone::rail::RailKind::Activator);
+            }
             _ => {}
+        }
+    }
+
+    /// Fans power-source edges from every rail in this rail's chain (up to 8 same-kind,
+    /// axis-connected rails in each direction) into `id`, so `get_bool_input`'s existing
+    /// "any input powered" logic implements the chain-relay rule at simulation time.
+    fn search_rail_chain(
+        &mut self,
+        id: NodeIdx,
+        pos: BlockPos,
+        shape: StraightRailShape,
+        kind: mchprs_redstone::rail::RailKind,
+    ) {
+        let (d1, d2) = mchprs_redstone::rail::shape_ends(shape);
+        for dir in [d1, d2] {
+            let mut chain_positions = Vec::new();
+            mchprs_redstone::rail::walk_chain(self.world, pos, dir, kind, 8, |p| {
+                chain_positions.push(p)
+            });
+            for chain_pos in chain_positions {
+                for face in &BlockFace::values() {
+                    let neighbor_pos = chain_pos.offset(*face);
+                    let neighbor_block = self.block_lookup_cache.get_block(neighbor_pos);
+                    self.get_redstone_links(
+                        neighbor_block,
+                        *face,
+                        neighbor_pos,
+                        LinkType::Default,
+                        0,
+                        id,
+                        true,
+                    );
+                }
+            }
         }
     }
 
@@ -587,6 +662,8 @@ fn provides_weak_power(block: Block, side: BlockFace) -> bool {
         Block::StoneButton { .. } => true,
         Block::Repeater(repeater) => repeater.facing.block_face() == side,
         Block::Comparator(comparator) => comparator.facing.block_face() == side,
+        // The observer's output is its back face — opposite the watched ("facing") side.
+        Block::Observer { facing, .. } => facing.opposite().block_face() == side,
         _ => false,
     }
 }
@@ -612,6 +689,7 @@ fn provides_strong_power(block: Block, side: BlockFace) -> bool {
         },
         Block::Repeater(repeater) => repeater.facing.block_face() == side,
         Block::Comparator(comparator) => comparator.facing.block_face() == side,
+        Block::Observer { facing, .. } => facing.opposite().block_face() == side,
         _ => false,
     }
 }

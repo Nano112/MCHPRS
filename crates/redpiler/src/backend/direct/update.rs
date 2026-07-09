@@ -162,6 +162,26 @@ pub(super) fn update_node(
                 }
             }
         }
+        NodeType::PoweredRail | NodeType::ActivatorRail => {
+            if node.is_io && node.custom_io_override {
+                return;
+            }
+            let should_be_powered = get_bool_input(node);
+            if node.powered != should_be_powered {
+                set_node(node, should_be_powered);
+            }
+        }
+        NodeType::Observer { .. } => {
+            if node.is_io && node.custom_io_override {
+                return;
+            }
+            // Any call here means a node we watch changed (see input_search's Observer
+            // edge) — schedule the pulse unless one is already pending or in progress.
+            if node.pending_tick || node.powered {
+                return;
+            }
+            schedule_tick(scheduler, node_id, node, 2, TickPriority::Normal);
+        }
         _ => {} // unreachable!("Node {:?} should not be updated!", node.ty),
     }
 }

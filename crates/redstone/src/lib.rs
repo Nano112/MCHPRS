@@ -4,11 +4,12 @@
 
 pub mod comparator;
 pub mod noteblock;
+pub mod rail;
 pub mod repeater;
 pub mod wire;
 
 use mchprs_blocks::block_entities::BlockEntity;
-use mchprs_blocks::blocks::{Block, LeverFace, RedstoneWire};
+use mchprs_blocks::blocks::{ActivatorRail, Block, LeverFace, PoweredRail, RedstoneWire};
 use mchprs_blocks::{BlockDirection, BlockFace, BlockPos};
 use mchprs_world::{TickPriority, World};
 
@@ -275,6 +276,43 @@ pub fn update(block: Block, world: &mut impl World, pos: BlockPos) {
                 world.set_block(pos, new_block);
             }
         }
+        Block::Observer { powered, .. } => {
+            // `update()` has no way to tell us which neighbor triggered it, so (unlike
+            // redpiler, which only wires an edge from the specific watched position) this
+            // conservatively re-arms on any neighbor change rather than just the watched
+            // face. Guarded by `pending_tick_at`/`powered` so it can't restart a pulse
+            // that's already in flight.
+            if !powered && !world.pending_tick_at(pos) {
+                world.schedule_tick(pos, 2, TickPriority::Normal);
+            }
+        }
+        Block::PoweredRail(rail) => {
+            let should_be_powered = rail::is_powered(world, pos, rail.shape, rail::RailKind::Powered);
+            if rail.powered != should_be_powered {
+                world.set_block(
+                    pos,
+                    Block::PoweredRail(PoweredRail {
+                        powered: should_be_powered,
+                        ..rail
+                    }),
+                );
+                rail::update_chain(world, pos, rail.shape, rail::RailKind::Powered);
+            }
+        }
+        Block::ActivatorRail(rail) => {
+            let should_be_powered =
+                rail::is_powered(world, pos, rail.shape, rail::RailKind::Activator);
+            if rail.powered != should_be_powered {
+                world.set_block(
+                    pos,
+                    Block::ActivatorRail(ActivatorRail {
+                        powered: should_be_powered,
+                        ..rail
+                    }),
+                );
+                rail::update_chain(world, pos, rail.shape, rail::RailKind::Activator);
+            }
+        }
         _ => {}
     }
 }
@@ -311,6 +349,21 @@ pub fn tick(block: Block, world: &mut impl World, pos: BlockPos) {
             let should_be_lit = redstone_lamp_should_be_lit(world, pos);
             if lit && !should_be_lit {
                 world.set_block(pos, Block::RedstoneLamp { lit: false });
+            }
+        }
+        Block::Observer { facing, powered } => {
+            // `update_surrounding_blocks` revisits `pos` itself (the top neighbor's bottom
+            // diagonal is `pos`), which is harmless for level-triggered blocks that just
+            // recompute the same answer, but Observer is edge-triggered on "was I called at
+            // all" — that self-visit would otherwise re-arm a pulse right after this one
+            // finishes, oscillating forever. Use the self-excluding variant instead.
+            if !powered {
+                world.set_block(pos, Block::Observer { facing, powered: true });
+                update_surrounding_blocks_except(world, pos, pos);
+                world.schedule_tick(pos, 2, TickPriority::Normal);
+            } else {
+                world.set_block(pos, Block::Observer { facing, powered: false });
+                update_surrounding_blocks_except(world, pos, pos);
             }
         }
         Block::StoneButton {
@@ -359,20 +412,39 @@ pub fn update_wire_neighbors(world: &mut impl World, pos: BlockPos) {
 }
 
 pub fn update_surrounding_blocks(world: &mut impl World, pos: BlockPos) {
+    update_surrounding_blocks_except(world, pos, None);
+}
+
+/// Same as [`update_surrounding_blocks`], but skips calling `update()` on `except` if it's
+/// reached (the top/bottom neighbors' opposite diagonal is always `pos` itself; most blocks
+/// are unaffected since their `update()` just idempotently recomputes the same state, but
+/// edge-triggered blocks like Observer need this to avoid re-triggering themselves).
+fn update_surrounding_blocks_except(
+    world: &mut impl World,
+    pos: BlockPos,
+    except: impl Into<Option<BlockPos>>,
+) {
+    let except = except.into();
     for direction in &BlockFace::values() {
         let neighbor_pos = pos.offset(*direction);
-        let block = world.get_block(neighbor_pos);
-        update(block, world, neighbor_pos);
+        if Some(neighbor_pos) != except {
+            let block = world.get_block(neighbor_pos);
+            update(block, world, neighbor_pos);
+        }
 
         // Also update diagonal blocks
 
         let up_pos = neighbor_pos.offset(BlockFace::Top);
-        let up_block = world.get_block(up_pos);
-        update(up_block, world, up_pos);
+        if Some(up_pos) != except {
+            let up_block = world.get_block(up_pos);
+            update(up_block, world, up_pos);
+        }
 
         let down_pos = neighbor_pos.offset(BlockFace::Bottom);
-        let down_block = world.get_block(down_pos);
-        update(down_block, world, down_pos);
+        if Some(down_pos) != except {
+            let down_block = world.get_block(down_pos);
+            update(down_block, world, down_pos);
+        }
     }
 }
 

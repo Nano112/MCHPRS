@@ -57,6 +57,10 @@ blocks:
   "minecraft:comparator": "prop_struct,item"
   "minecraft:redstone_block": "transparent,cube,simple_item"
   "minecraft:observer": "item"
+  "minecraft:rail": "prop_struct,item"
+  "minecraft:powered_rail": "prop_struct,item"
+  "minecraft:activator_rail": "prop_struct,item"
+  "minecraft:detector_rail": "prop_struct,item"
   "minecraft:sea_pickle": "item"
   "minecraft:target": "solid,cube,item"
   "minecraft:oak_pressure_plate": "item,wood"
@@ -231,6 +235,24 @@ prop_types:
   ComparatorMode:
     - compare
     - subtract
+  RailShape:
+    - north_south
+    - east_west
+    - ascending_east
+    - ascending_west
+    - ascending_north
+    - ascending_south
+    - south_east
+    - south_west
+    - north_west
+    - north_east
+  StraightRailShape:
+    - north_south
+    - east_west
+    - ascending_east
+    - ascending_west
+    - ascending_north
+    - ascending_south
 
 # Items defined here are those that could not have been defined by the block `item` or
 # `simple_item` attributes. This is either because the item has a non-standard stack
