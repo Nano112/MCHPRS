@@ -13,13 +13,20 @@ jobs:
       matrix:
         target:
           - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
           - x86_64-pc-windows-msvc
+          - aarch64-pc-windows-msvc
           - x86_64-apple-darwin
           - aarch64-apple-darwin
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
           - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            ext: .exe
+          - target: aarch64-pc-windows-msvc
             os: windows-latest
             ext: .exe
           - target: x86_64-apple-darwin
@@ -43,13 +50,32 @@ jobs:
       - name: Build
         env:
           CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: rust-lld.exe
+          CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER: rust-lld.exe
+
         run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir package
+          cp target/${{ matrix.target }}/release/mchprs package/mchprs
+          tar -czf mchprs-${{ matrix.target }}.tar.gz -C package mchprs
+
+      - name: Package binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path package | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/mchprs.exe" "package/mchprs.exe"
+          Compress-Archive -Path "package/mchprs.exe" -DestinationPath "mchprs-${{ matrix.target }}.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: mchprs-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/mchprs${{ matrix.ext }}
+          path: |
+            mchprs-${{ matrix.target }}.tar.gz
+            mchprs-${{ matrix.target }}.zip
 
   build-macos-universal:
     needs: build
@@ -64,14 +90,25 @@ jobs:
           name: mchprs-aarch64-apple-darwin
           path: aarch64
 
+      - name: Extract artifacts
+        run: |
+          tar -xzf x86_64/mchprs-x86_64-apple-darwin.tar.gz -C x86_64
+          tar -xzf aarch64/mchprs-aarch64-apple-darwin.tar.gz -C aarch64
+
       - name: Create universal binary
         run: lipo -create -output mchprs x86_64/mchprs aarch64/mchprs
+
+      - name: Package universal binary
+        run: |
+          mkdir package
+          cp mchprs package/mchprs
+          tar -czf mchprs-universal-apple-darwin.tar.gz -C package mchprs
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: mchprs-universal-apple-darwin
-          path: mchprs
+          path: mchprs-universal-apple-darwin.tar.gz
 
   publish:
     needs: [build, build-macos-universal]
@@ -84,10 +121,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: Reorganize artifacts
+
+      - name: Collect release assets
         run: |
-          mkdir -p dist/
-          find artifacts/ -type f -exec bash -c 'base=$(basename $1); mv $1 dist/$(basename $(dirname $1))${base#${base%.*}}' _ {} \;
+          mkdir -p dist
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec cp {} dist/ \;
+          ls -l dist
 
       - name: Create preview release
         env:
@@ -98,7 +137,7 @@ jobs:
             --prerelease \
             --title "${GITHUB_REPOSITORY} Preview Build" \
             --notes "🚧 **This is a preview build of the latest commit.**" \
-            dist/*
+            dist/*.tar.gz dist/*.zip
 
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/')
@@ -109,4 +148,4 @@ jobs:
           gh release create "$tag" \
             --title "${GITHUB_REPOSITORY} ${tag#v}" \
             --generate-notes \
-            dist/*
+            dist/*.tar.gz dist/*.zip

@@ -1,10 +1,16 @@
 pub mod storage;
+#[cfg(feature = "testing")]
+pub mod testing;
 
 use mchprs_blocks::block_entities::BlockEntity;
 use mchprs_blocks::blocks::Block;
 use mchprs_blocks::BlockPos;
 use serde::{Deserialize, Serialize};
 use storage::Chunk;
+
+pub const MC_VERSION: &str = "1.20.4";
+pub const MC_DATA_VERSION: i32 = 3700;
+pub const PROTOCOL_VERSION: i32 = 765;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TickPriority {
@@ -21,7 +27,7 @@ pub struct TickEntry {
     pub pos: BlockPos,
 }
 
-pub trait World {
+pub trait World: 'static {
     /// Returns the block located at `pos`
     fn get_block(&self, pos: BlockPos) -> Block {
         Block::from_id(self.get_block_raw(pos))
@@ -79,6 +85,8 @@ pub trait World {
         pitch: f32,
     ) {
     }
+
+    fn flush_block_changes(&mut self) {}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -98,12 +106,14 @@ impl ChunkSectionIdx {
 /// ie, over x,y,z triples (where x,z are chunk indexes and y are section indexes)
 /// such that the bounding box defined by the two block positions intersect
 /// section y of the x,z chunk.
+///
 /// The iterator yields the chunks in x,z order, and the sections in y order,
 /// i.e., if visiting sections 1,2 of chunks 0,0 and 0,1, the iterator will yield
 /// - section 1 of chunk 0,0 (0,1,0)
 /// - section 2 of chunk 0,0 (0,1,1)
 /// - section 1 of chunk 0,1 (0,2,0)
 /// - section 2 of chunk 0,1 (0,2,1)
+///
 /// The iterator will not yield any chunks or sections
 /// that are entirely outside the bounding box.
 fn chunk_section_idxs_between(
@@ -435,7 +445,7 @@ mod test {
     // mock World implementation for tests in this module,
     // we don't need most of the methods
     impl World for TestWorld {
-        fn get_block_raw(&self, pos: BlockPos) -> u32 {
+        fn get_block_raw(&self, _pos: BlockPos) -> u32 {
             unimplemented!()
         }
 
@@ -451,15 +461,15 @@ mod test {
             )
         }
 
-        fn delete_block_entity(&mut self, pos: BlockPos) {
+        fn delete_block_entity(&mut self, _pos: BlockPos) {
             unimplemented!()
         }
 
-        fn get_block_entity(&self, pos: BlockPos) -> Option<&BlockEntity> {
+        fn get_block_entity(&self, _pos: BlockPos) -> Option<&BlockEntity> {
             unimplemented!()
         }
 
-        fn set_block_entity(&mut self, pos: BlockPos, block_entity: BlockEntity) {
+        fn set_block_entity(&mut self, _pos: BlockPos, _block_entity: BlockEntity) {
             unimplemented!()
         }
 
@@ -471,11 +481,11 @@ mod test {
             self.0.iter_mut().find(|c| c.x == x && c.z == z)
         }
 
-        fn schedule_tick(&mut self, pos: BlockPos, delay: u32, priority: TickPriority) {
+        fn schedule_tick(&mut self, _pos: BlockPos, _delay: u32, _priority: TickPriority) {
             unimplemented!()
         }
 
-        fn pending_tick_at(&mut self, pos: BlockPos) -> bool {
+        fn pending_tick_at(&mut self, _pos: BlockPos) -> bool {
             unimplemented!()
         }
     }

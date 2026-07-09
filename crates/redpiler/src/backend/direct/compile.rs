@@ -1,11 +1,10 @@
-use crate::compile_graph::{CompileGraph, LinkType, NodeIdx};
+use crate::backend::direct::node::ForwardLinks;
+use crate::compile_graph::{CompileGraph, Direction, LinkType, NodeIdx};
 use crate::{CompilerOptions, TaskMonitor};
 use itertools::Itertools;
 use mchprs_blocks::blocks::{Block, Instrument};
 use mchprs_blocks::BlockPos;
 use mchprs_world::TickEntry;
-use petgraph::visit::EdgeRef;
-use petgraph::Direction;
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 use std::sync::Arc;
@@ -27,7 +26,8 @@ fn compile_node(
     node_idx: NodeIdx,
     nodes_len: usize,
     nodes_map: &FxHashMap<NodeIdx, usize>,
-    noteblock_info: &mut Vec<(BlockPos, Instrument, u32)>,
+    noteblock_info: &mut Vec<(SmallVec<[BlockPos; 1]>, Instrument, u8)>,
+    forward_links: &mut ForwardLinks,
     stats: &mut FinalGraphStats,
 ) -> Node {
     let node = &graph[node_idx];
@@ -39,7 +39,7 @@ fn compile_node(
 
     let mut default_inputs = NodeInput { ss_counts: [0; 16] };
     let mut side_inputs = NodeInput { ss_counts: [0; 16] };
-    for edge in graph.edges_directed(node_idx, Direction::Incoming) {
+    for edge in graph.edges(node_idx, Direction::Incoming) {
         let weight = edge.weight();
         let distance = weight.ss;
         let source = edge.source();
@@ -73,25 +73,32 @@ fn compile_node(
     side_inputs.ss_counts[0] += (MAX_INPUTS - side_input_count) as u8;
 
     use crate::compile_graph::NodeType as CNodeType;
-    // Note: All nodes can have outgoing links (including custom IO nodes)
-    let updates: SmallVec<[ForwardLink; 10]> = graph
-        .edges_directed(node_idx, Direction::Outgoing)
-        .sorted_by_key(|edge| nodes_map[&edge.target()])
-        .into_group_map_by(|edge| std::mem::discriminant(&graph[edge.target()].ty))
-        .into_values()
-        .flatten()
-        .map(|edge| unsafe {
-            let idx = edge.target();
-            let idx = nodes_map[&idx];
-            assert!(idx < nodes_len);
-            // Safety: bounds checked
-            let target_id = NodeId::from_index(idx);
+    // Custom IO nodes are compiled down to Constant so that set_signal_strength can
+    // update their output directly, but they still need outgoing links so that
+    // manual signal changes propagate through ForwardLinks like any other node.
+    let needs_fwd_links = node.ty != CNodeType::Constant || node.is_input || node.is_output;
+    let fwd_link_range = if needs_fwd_links {
+        let new_links = graph
+            .edges(node_idx, Direction::Outgoing)
+            .sorted_by_key(|edge| nodes_map[&edge.target()])
+            .into_group_map_by(|edge| std::mem::discriminant(&graph[edge.target()].ty))
+            .into_values()
+            .flatten()
+            .map(|edge| unsafe {
+                let idx = edge.target();
+                let idx = nodes_map[&idx];
+                assert!(idx < nodes_len);
+                // Safety: bounds checked
+                let target_id = NodeId::from_index(idx);
 
-            let weight = edge.weight();
-            ForwardLink::new(target_id, weight.ty == LinkType::Side, weight.ss)
-        })
-        .collect();
-    stats.update_link_count += updates.len();
+                let weight = edge.weight();
+                ForwardLink::new(target_id, weight.ty == LinkType::Side, weight.ss)
+            });
+        forward_links.extend(new_links)
+    } else {
+        Default::default()
+    };
+    stats.update_link_count += fwd_link_range.len();
 
     let ty = match &node.ty {
         CNodeType::Repeater {
@@ -120,7 +127,11 @@ fn compile_node(
         CNodeType::Constant => NodeType::Constant,
         CNodeType::NoteBlock { instrument, note } => {
             let noteblock_id = noteblock_info.len().try_into().unwrap();
-            noteblock_info.push((node.block.unwrap().0, *instrument, *note));
+            noteblock_info.push((
+                node.block.iter().copied().map(|(pos, _)| pos).collect(),
+                *instrument,
+                *note,
+            ));
             NodeType::NoteBlock { noteblock_id }
         }
     };
@@ -129,7 +140,7 @@ fn compile_node(
         ty,
         default_inputs,
         side_inputs,
-        updates,
+        fwd_link_range,
         powered: node.state.powered,
         output_power: node.state.output_strength,
         locked: node.state.repeater_locked,
@@ -165,6 +176,7 @@ pub fn compile(
                 nodes_len,
                 &nodes_map,
                 &mut backend.noteblock_info,
+                &mut backend.forward_links,
                 &mut stats,
             )
         })
@@ -173,14 +185,20 @@ pub fn compile(
     trace!("{:#?}", stats);
 
     backend.blocks = graph
-        .node_weights()
-        .map(|node| node.block.map(|(pos, id)| (pos, Block::from_id(id))))
+        .all_node_weights()
+        .map(|node| {
+            node.block
+                .iter()
+                .copied()
+                .map(|(pos, id)| (pos, Block::from_id(id)))
+                .collect()
+        })
         .collect();
     backend.nodes = Nodes::new(nodes);
 
     // Create a mapping from block pos to backend NodeId
     for i in 0..backend.blocks.len() {
-        if let Some((pos, _)) = backend.blocks[i] {
+        for (pos, _) in backend.blocks[i].iter().copied() {
             backend.pos_map.insert(pos, backend.nodes.get(i));
         }
     }

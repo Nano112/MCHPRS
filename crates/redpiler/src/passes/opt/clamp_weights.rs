@@ -1,6 +1,5 @@
-use super::Pass;
 use crate::compile_graph::CompileGraph;
-use crate::passes::AnalysisInfos;
+use crate::passes::{AnalysisInfos, Pass};
 use crate::{CompilerInput, CompilerOptions};
 use mchprs_world::World;
 
@@ -17,12 +16,11 @@ impl<W: World> Pass<W> for ClampWeights {
         graph.retain_edges(|g, edge| g[edge].ss < 15);
     }
 
-    fn should_run(&self, _: &CompilerOptions) -> bool {
-        // Mandatory
-        true
-    }
-
     fn status_message(&self) -> &'static str {
         "Clamping weights"
+    }
+
+    fn driver_key(&self) -> &'static str {
+        "clamp-weights"
     }
 }

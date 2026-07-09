@@ -23,6 +23,7 @@ use mchprs_network::packets::{PacketEncoderExt, PlayerProperty, SlotData, COMPRE
 use mchprs_network::{NetworkServer, NetworkState, PlayerPacketSender};
 use mchprs_text::TextComponent;
 use mchprs_utils::map;
+use mchprs_world::{MC_VERSION, PROTOCOL_VERSION};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -33,10 +34,6 @@ use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
-
-pub const MC_VERSION: &str = "1.20.4";
-pub const MC_DATA_VERSION: i32 = 3700;
-pub const PROTOCOL_VERSION: i32 = 765;
 
 /// `Message` gets send from a plot thread to the server thread.
 #[derive(Debug)]
@@ -438,19 +435,19 @@ impl MinecraftServer {
         let username = login_start.name;
         clients[client_idx].username = Some(username.clone());
 
-        if let Some(velocity_config) = &CONFIG.velocity {
-            if velocity_config.enabled {
-                let message_id = rand::random();
-                clients[client_idx].forwarding_message_id = Some(message_id);
-                let plugin_message = CLoginPluginRequest {
-                    channel: "velocity:player_info".to_string(),
-                    message_id,
-                    data: vec![1], // MODERN_DEFAULT
-                }
-                .encode();
-                clients[client_idx].send_packet(&plugin_message);
-                return;
+        if let Some(velocity_config) = &CONFIG.velocity
+            && velocity_config.enabled
+        {
+            let message_id = rand::random();
+            clients[client_idx].forwarding_message_id = Some(message_id);
+            let plugin_message = CLoginPluginRequest {
+                channel: "velocity:player_info".to_string(),
+                message_id,
+                data: vec![1], // MODERN_DEFAULT
             }
+            .encode();
+            clients[client_idx].send_packet(&plugin_message);
+            return;
         }
 
         self.complete_player_login(client_idx);
@@ -841,4 +838,13 @@ impl ServerBoundPacketHandler for MinecraftServer {
         clients[client_idx].properties = velocity_response.properties;
         self.complete_player_login(client_idx);
     }
+}
+
+pub fn get_version_string() -> String {
+    format!(
+        "{} v{}\n{}",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION"),
+        env!("GIT_HASH")
+    )
 }

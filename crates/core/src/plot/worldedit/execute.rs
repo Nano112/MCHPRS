@@ -4,20 +4,20 @@ use crate::player::PacketSender;
 use crate::plot::PLOT_BLOCK_HEIGHT;
 use crate::utils::{self, HyphenatedUUID};
 use mchprs_blocks::block_entities::InventoryEntry;
-use mchprs_blocks::blocks::{Block, FlipDirection, RotateAmt};
+use mchprs_blocks::blocks::{Block, FlipDirection, HopperFacing, RotateAmt};
 use mchprs_blocks::items::{Item, ItemStack};
-use mchprs_blocks::{BlockFace, BlockFacing, BlockPos};
+use mchprs_blocks::{BlockDirection, BlockFace, BlockFacing, BlockPos};
 use mchprs_network::packets::clientbound::*;
+use mchprs_schematic::{load_schematic, paste_clipboard, save_schematic, WorldEditClipboard};
 use mchprs_text::{ColorCode, TextComponentBuilder};
-use once_cell::sync::Lazy;
-use schematic::{load_schematic, save_schematic};
+use std::path::PathBuf;
 use std::time::Instant;
 use tracing::error;
 
 pub(super) fn execute_wand(ctx: CommandExecuteContext<'_>) {
     let item = ItemStack {
         count: 1,
-        item_type: Item::WEWand {},
+        item_type: Item::WoodenAxe,
         nbt: None,
     };
     ctx.player.inventory[(ctx.player.selected_slot + 36) as usize] = Some(item);
@@ -231,14 +231,18 @@ pub(super) fn execute_paste(ctx: CommandExecuteContext<'_>) {
         let offset_z = pos.z - cb.offset_z;
         let first_pos = BlockPos::new(offset_x, offset_y, offset_z);
         let second_pos = BlockPos::new(
-            offset_x + cb.size_x as i32,
-            offset_y + cb.size_y as i32,
-            offset_z + cb.size_z as i32,
+            offset_x + cb.size_x as i32 - 1,
+            offset_y + cb.size_y as i32 - 1,
+            offset_z + cb.size_z as i32 - 1,
         );
         capture_undo(ctx.plot, ctx.player, first_pos, second_pos);
         paste_clipboard(ctx.plot, cb, pos, ctx.has_flag('a'));
         if ctx.has_flag('u') {
             update(ctx.plot, first_pos, second_pos);
+        }
+        if ctx.has_flag('s') {
+            ctx.player.worldedit_set_first_position(first_pos);
+            ctx.player.worldedit_set_second_position(second_pos);
         }
         ctx.player.send_worldedit_message(&format!(
             "Your clipboard was pasted. ({:?})",
@@ -249,8 +253,8 @@ pub(super) fn execute_paste(ctx: CommandExecuteContext<'_>) {
     }
 }
 
-static SCHEMATI_VALIDATE_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[a-zA-Z0-9_.]+\.schem(atic)?").unwrap());
+static SCHEMATI_VALIDATE_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[a-zA-Z0-9_.]+\.schem(atic)?").unwrap());
 
 pub(super) fn execute_load(ctx: CommandExecuteContext<'_>) {
     let start_time = Instant::now();
@@ -266,7 +270,8 @@ pub(super) fn execute_load(ctx: CommandExecuteContext<'_>) {
         file_name.insert_str(0, &prefix);
     }
 
-    let clipboard = load_schematic(&file_name);
+    let path = PathBuf::from("./schems").join(file_name);
+    let clipboard = load_schematic(&path);
     match clipboard {
         Ok(cb) => {
             ctx.player.worldedit_clipboard = Some(cb);
@@ -276,12 +281,12 @@ pub(super) fn execute_load(ctx: CommandExecuteContext<'_>) {
             ));
         }
         Err(e) => {
-            if let Some(e) = e.downcast_ref::<std::io::Error>() {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    let msg = "The specified schematic file could not be found.";
-                    ctx.player.send_error_message(msg);
-                    return;
-                }
+            if let Some(e) = e.downcast_ref::<std::io::Error>()
+                && e.kind() == std::io::ErrorKind::NotFound
+            {
+                let msg = "The specified schematic file could not be found.";
+                ctx.player.send_error_message(msg);
+                return;
             }
             error!("There was an error loading a schematic:");
             error!("{}", e);
@@ -306,8 +311,9 @@ pub(super) fn execute_save(ctx: CommandExecuteContext<'_>) {
         file_name.insert_str(0, &prefix);
     }
 
+    let path = PathBuf::from("./schems").join(file_name);
     let clipboard = ctx.player.worldedit_clipboard.as_ref().unwrap();
-    match save_schematic(&file_name, clipboard) {
+    match save_schematic(&path, clipboard) {
         Ok(_) => {
             ctx.player.send_worldedit_message(&format!(
                 "The schematic was saved sucessfuly. ({:?})",
@@ -866,7 +872,7 @@ pub(super) fn execute_up(ctx: CommandExecuteContext<'_>) {
     let block_pos = pos.block_pos();
 
     let platform_pos = block_pos.offset(BlockFace::Bottom);
-    if matches!(ctx.plot.get_block(platform_pos), Block::Air {}) {
+    if matches!(ctx.plot.get_block(platform_pos), Block::Air) {
         ctx.plot.set_block(platform_pos, Block::Glass {});
     }
 
@@ -890,9 +896,9 @@ pub(super) fn execute_ascend(ctx: CommandExecuteContext<'_>) {
         let floor_pos = player_pos + BlockPos::new(0, y - 1, 0);
         let pos = player_pos + BlockPos::new(0, y, 0);
         let high_pos = player_pos + BlockPos::new(0, y + 1, 0);
-        if ctx.plot.get_block(floor_pos) != (Block::Air {})
-            && ctx.plot.get_block(pos) == (Block::Air {})
-            && ctx.plot.get_block(high_pos) == (Block::Air {})
+        if ctx.plot.get_block(floor_pos) != Block::Air
+            && ctx.plot.get_block(pos) == Block::Air
+            && ctx.plot.get_block(high_pos) == Block::Air
         {
             player_y = pos.y;
             levels -= 1;
@@ -926,9 +932,9 @@ pub(super) fn execute_descend(ctx: CommandExecuteContext<'_>) {
         let floor_pos = player_pos + BlockPos::new(0, y - 1, 0);
         let pos = player_pos + BlockPos::new(0, y, 0);
         let high_pos = player_pos + BlockPos::new(0, y + 1, 0);
-        if ctx.plot.get_block(floor_pos) != (Block::Air {})
-            && ctx.plot.get_block(pos) == (Block::Air {})
-            && ctx.plot.get_block(high_pos) == (Block::Air {})
+        if ctx.plot.get_block(floor_pos) != Block::Air
+            && ctx.plot.get_block(pos) == Block::Air
+            && ctx.plot.get_block(high_pos) == Block::Air
         {
             player_y = pos.y;
             levels -= 1;
@@ -1022,9 +1028,18 @@ pub(super) fn execute_replace_container(ctx: CommandExecuteContext<'_>) {
     let to = ctx.arguments[1].unwrap_container_type();
 
     let new_block = match to {
-        ContainerType::Furnace => Block::Furnace {},
-        ContainerType::Barrel => Block::Barrel {},
-        ContainerType::Hopper => Block::Hopper {},
+        ContainerType::Furnace => Block::Furnace {
+            facing: BlockDirection::North,
+            lit: false,
+        },
+        ContainerType::Barrel => Block::Barrel {
+            open: false,
+            facing: BlockFacing::Up,
+        },
+        ContainerType::Hopper => Block::Hopper {
+            enabled: false,
+            facing: HopperFacing::Down,
+        },
     };
     let slots = to.num_slots() as u32;
 
@@ -1037,7 +1052,7 @@ pub(super) fn execute_replace_container(ctx: CommandExecuteContext<'_>) {
 
                 if !matches!(
                     block,
-                    Block::Furnace {} | Block::Barrel {} | Block::Hopper {}
+                    Block::Furnace { .. } | Block::Barrel { .. } | Block::Hopper { .. }
                 ) {
                     continue;
                 }

@@ -8,6 +8,7 @@ pub(super) fn update_node(
     scheduler: &mut TickScheduler,
     events: &mut Vec<Event>,
     nodes: &mut Nodes,
+    forward_links: &ForwardLinks,
     node_id: NodeId,
 ) {
     let node = &mut nodes[node_id];
@@ -64,10 +65,10 @@ pub(super) fn update_node(
                 return;
             }
             let (mut input_power, side_input_power) = get_all_input(node);
-            if let Some(far_override) = far_input {
-                if input_power < 15 {
-                    input_power = far_override.get();
-                }
+            if let Some(far_override) = far_input
+                && input_power < 15
+            {
+                input_power = far_override.get();
             }
             let old_strength = node.output_power;
             let output_power = calculate_comparator_output(mode, input_power, side_input_power);
@@ -117,12 +118,11 @@ pub(super) fn update_node(
                 
                 // Propagate power change to neighboring nodes
                 // We need to manually update neighbors since wires don't use set_node
-                for i in 0..node.updates.len() {
-                    let node = &nodes[node_id];
-                    let update_link = unsafe { *node.updates.get_unchecked(i) };
-                    let side = update_link.side();
-                    let distance = update_link.ss();
-                    let update = update_link.node();
+                let node = &nodes[node_id];
+                for forward_link in forward_links.get(&node.fwd_link_range) {
+                    let side = forward_link.side();
+                    let distance = forward_link.ss();
+                    let update = forward_link.node();
 
                     let update_ref = &mut nodes[update];
                     let inputs = if side {
@@ -146,7 +146,7 @@ pub(super) fn update_node(
                     }
 
                     // Recursively update the neighbor
-                    update_node(scheduler, events, nodes, update);
+                    update_node(scheduler, events, nodes, forward_links, update);
                 }
             }
         }

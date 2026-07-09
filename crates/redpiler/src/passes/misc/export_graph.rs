@@ -1,12 +1,11 @@
-use super::Pass;
-use crate::compile_graph::{CompileGraph, LinkType as CLinkType, NodeIdx, NodeType as CNodeType};
-use crate::passes::AnalysisInfos;
+use crate::compile_graph::{
+    CompileGraph, Direction, LinkType as CLinkType, NodeIdx, NodeType as CNodeType,
+};
+use crate::passes::{AnalysisInfos, AnalysisUsage, Pass};
 use crate::{CompilerInput, CompilerOptions};
 use itertools::Itertools;
 use mchprs_blocks::blocks::ComparatorMode as CComparatorMode;
 use mchprs_world::World;
-use petgraph::visit::EdgeRef;
-use petgraph::Direction;
 use redpiler_graph::{
     serialize, BlockPos, ComparatorMode, Link, LinkType, Node, NodeState, NodeType,
 };
@@ -21,7 +20,7 @@ fn convert_node(
     let node = &graph[node_idx];
 
     let mut inputs = Vec::new();
-    for edge in graph.edges_directed(node_idx, Direction::Incoming) {
+    for edge in graph.edges(node_idx, Direction::Incoming) {
         let idx = nodes_map[&edge.source()];
         let weight = edge.weight();
         inputs.push(Link {
@@ -35,7 +34,7 @@ fn convert_node(
     }
 
     let updates = graph
-        .neighbors_directed(node_idx, Direction::Outgoing)
+        .neighbors(node_idx, Direction::Outgoing)
         .map(|idx| nodes_map[&idx])
         .collect();
 
@@ -68,16 +67,21 @@ fn convert_node(
             CNodeType::Constant => NodeType::Constant,
             CNodeType::NoteBlock { .. } => NodeType::NoteBlock,
         },
-        block: node.block.map(|(pos, id)| {
-            (
-                BlockPos {
-                    x: pos.x,
-                    y: pos.y,
-                    z: pos.z,
-                },
-                id,
-            )
-        }),
+        block: node
+            .block
+            .iter()
+            .copied()
+            .map(|(pos, id)| {
+                (
+                    BlockPos {
+                        x: pos.x,
+                        y: pos.y,
+                        z: pos.z,
+                    },
+                    id,
+                )
+            })
+            .collect(),
         state: NodeState {
             output_strength: node.state.output_strength,
             powered: node.state.powered,
@@ -114,11 +118,15 @@ impl<W: World> Pass<W> for ExportGraph {
         fs::write("redpiler_graph.bc", serialize(nodes.as_slice()).unwrap()).unwrap();
     }
 
-    fn should_run(&self, options: &CompilerOptions) -> bool {
-        options.export
-    }
-
     fn status_message(&self) -> &'static str {
         "Exporting graph"
+    }
+
+    fn analysis_usage(&self, au: &mut AnalysisUsage) {
+        au.set_preserves_all();
+    }
+
+    fn driver_key(&self) -> &'static str {
+        "export-graph"
     }
 }

@@ -2,6 +2,8 @@ use super::node::NodeId;
 use super::*;
 
 impl DirectBackend {
+    // Benchmarks show that `tick_node` getting inlined into `tick` causes worse perf.
+    #[inline(never)]
     pub fn tick_node(&mut self, node_id: NodeId) {
         let node = &mut self.nodes[node_id];
         node.pending_tick = false;
@@ -41,11 +43,11 @@ impl DirectBackend {
             NodeType::Comparator {
                 mode, far_input, ..
             } => {
-            let (mut input_power, side_input_power) = get_all_input(node);
-            if let Some(far_override) = far_input {
-                    if input_power < 15 {
-                        input_power = far_override.get();
-                    }
+                let (mut input_power, side_input_power) = get_all_input(node);
+                if let Some(far_override) = far_input
+                    && input_power < 15
+                {
+                    input_power = far_override.get();
                 }
                 let old_strength = node.output_power;
                 let new_strength = calculate_comparator_output(mode, input_power, side_input_power);

@@ -9,10 +9,12 @@ readme.workspace = true
 version.workspace = true
 license.workspace = true
 repository.workspace = true
+include.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+mchprs_proc_macros = { path = "../proc_macros" }
 mchprs_text = { path = "../text" }
 hematite-nbt = { workspace = true }
 flate2 = { workspace = true }

@@ -6,6 +6,7 @@ mod tick;
 mod update;
 
 use super::JITBackend;
+use crate::backend::direct::node::ForwardLinks;
 use crate::compile_graph::CompileGraph;
 use crate::task_monitor::TaskMonitor;
 use crate::{block_powered_mut, CompilerOptions};
@@ -16,6 +17,8 @@ use mchprs_redstone::{bool_to_ss, noteblock};
 use mchprs_world::{TickEntry, TickPriority, World};
 use node::{Node, NodeId, NodeType, Nodes};
 use rustc_hash::FxHashMap;
+use smallvec::SmallVec;
+use std::fmt::Write;
 use std::sync::Arc;
 use std::{fmt, mem};
 use tracing::{debug, warn};
@@ -24,10 +27,14 @@ use tracing::{debug, warn};
 struct Queues([Vec<NodeId>; TickScheduler::NUM_PRIORITIES]);
 
 impl Queues {
-    fn drain_iter(&mut self) -> impl Iterator<Item = NodeId> + '_ {
-        let [q0, q1, q2, q3] = &mut self.0;
-        let [q0, q1, q2, q3] = [q0, q1, q2, q3].map(|q| q.drain(..));
-        q0.chain(q1).chain(q2).chain(q3)
+    #[inline(always)]
+    fn drain_each<F: FnMut(NodeId)>(&mut self, mut f: F) {
+        for q in self.0.iter_mut() {
+            for n in q.iter() {
+                f(*n);
+            }
+            q.clear();
+        }
     }
 }
 
@@ -41,7 +48,7 @@ impl TickScheduler {
     const NUM_PRIORITIES: usize = 4;
     const NUM_QUEUES: usize = 16;
 
-    fn reset<W: World>(&mut self, world: &mut W, blocks: &[Option<(BlockPos, Block)>]) {
+    fn reset<W: World>(&mut self, world: &mut W, blocks: &[impl AsRef<[(BlockPos, Block)]>]) {
         for (idx, queues) in self.queues_deque.iter().enumerate() {
             let delay = if self.pos >= idx {
                 idx + Self::NUM_QUEUES
@@ -50,11 +57,14 @@ impl TickScheduler {
             } - self.pos;
             for (entries, priority) in queues.0.iter().zip(Self::priorities()) {
                 for node in entries {
-                    let Some((pos, _)) = blocks[node.index()] else {
+                    let node_blocks = blocks[node.index()].as_ref();
+                    if node_blocks.is_empty() {
                         warn!("Cannot schedule tick for node {:?} because block information is missing", node);
                         continue;
                     };
-                    world.schedule_tick(pos, delay as u32, priority);
+                    for (pos, _) in node_blocks.iter().copied() {
+                        world.schedule_tick(pos, delay as u32, priority);
+                    }
                 }
             }
         }
@@ -74,11 +84,8 @@ impl TickScheduler {
         mem::take(&mut self.queues_deque[self.pos])
     }
 
-    fn end_tick(&mut self, mut queues: Queues) {
-        for queue in &mut queues.0 {
-            queue.clear();
-        }
-        self.queues_deque[self.pos] = queues;
+    fn end_tick(&mut self, queues: Queues) {
+        self.queues_deque[self.pos % Self::NUM_QUEUES] = queues;
     }
 
     fn priorities() -> [TickPriority; Self::NUM_PRIORITIES] {
@@ -109,11 +116,12 @@ enum Event {
 #[derive(Default)]
 pub struct DirectBackend {
     nodes: Nodes,
-    blocks: Vec<Option<(BlockPos, Block)>>,
+    forward_links: ForwardLinks,
+    blocks: Vec<SmallVec<[(BlockPos, Block); 1]>>,
     pos_map: FxHashMap<BlockPos, NodeId>,
     scheduler: TickScheduler,
     events: Vec<Event>,
-    noteblock_info: Vec<(BlockPos, Instrument, u32)>,
+    noteblock_info: Vec<(SmallVec<[BlockPos; 1]>, Instrument, u8)>,
 }
 
 impl DirectBackend {
@@ -128,13 +136,11 @@ impl DirectBackend {
         node.changed = true;
         node.powered = powered;
         node.output_power = new_power;
-        
-        for i in 0..node.updates.len() {
-            let node = &self.nodes[node_id];
-            let update_link = unsafe { *node.updates.get_unchecked(i) };
-            let side = update_link.side();
-            let distance = update_link.ss();
-            let update = update_link.node();
+
+        for forward_link in self.forward_links.get(&node.fwd_link_range) {
+            let side = forward_link.side();
+            let distance = forward_link.ss();
+            let update = forward_link.node();
 
             let update_ref = &mut self.nodes[update];
             let inputs = if side {
@@ -162,6 +168,7 @@ impl DirectBackend {
                 &mut self.scheduler,
                 &mut self.events,
                 &mut self.nodes,
+                &self.forward_links,
                 update,
             );
         }
@@ -184,21 +191,21 @@ impl JITBackend for DirectBackend {
         let nodes = std::mem::take(&mut self.nodes);
 
         for (i, node) in nodes.into_inner().iter().enumerate() {
-            let Some((pos, block)) = self.blocks[i] else {
-                continue;
-            };
-            if matches!(node.ty, NodeType::Comparator { .. }) {
-                let block_entity = BlockEntity::Comparator {
-                    output_strength: node.output_power,
-                };
-                world.set_block_entity(pos, block_entity);
-            }
+            for (pos, block) in self.blocks[i].iter().copied() {
+                if matches!(node.ty, NodeType::Comparator { .. }) {
+                    let block_entity = BlockEntity::Comparator {
+                        output_strength: node.output_power,
+                    };
+                    world.set_block_entity(pos, block_entity);
+                }
 
-            if io_only && !node.is_io {
-                world.set_block(pos, block);
+                if io_only && !node.is_io {
+                    world.set_block(pos, block);
+                }
             }
         }
 
+        self.forward_links.clear();
         self.pos_map.clear();
         self.noteblock_info.clear();
         self.events.clear();
@@ -236,9 +243,9 @@ impl JITBackend for DirectBackend {
     fn tick(&mut self) {
         let mut queues = self.scheduler.queues_this_tick();
 
-        for node_id in queues.drain_iter() {
+        queues.drain_each(|node_id| {
             self.tick_node(node_id);
-        }
+        });
 
         self.scheduler.end_tick(queues);
     }
@@ -247,31 +254,36 @@ impl JITBackend for DirectBackend {
         for event in self.events.drain(..) {
             match event {
                 Event::NoteBlockPlay { noteblock_id } => {
-                    let (pos, instrument, note) = self.noteblock_info[noteblock_id as usize];
-                    noteblock::play_note(world, pos, instrument, note);
+                    let (positions, instrument, note) = &self.noteblock_info[noteblock_id as usize];
+                    for pos in positions.iter().copied() {
+                        noteblock::play_note(world, pos, *instrument, *note);
+                    }
                 }
             }
         }
         for (i, node) in self.nodes.inner_mut().iter_mut().enumerate() {
-            let Some((pos, block)) = &mut self.blocks[i] else {
+            if !node.changed || (io_only && !node.is_io) {
                 continue;
-            };
-            if node.changed && (!io_only || node.is_io) {
+            }
+            // Keep custom IO nodes with an override marked as changed so they
+            // continue syncing their visual state on every flush.
+            if !(node.is_io && node.custom_io_override) {
+                node.changed = false;
+            }
+            for (pos, block) in &mut self.blocks[i] {
                 if let Some(powered) = block_powered_mut(block) {
                     *powered = node.powered
                 }
-                if let Block::RedstoneWire { ref mut wire, .. } = block {
-                    wire.power = node.output_power;
+                if let Block::IronTrapdoor { open, .. } = block {
+                    *open = node.powered;
+                }
+                if let Block::RedstoneWire(wire) = block {
+                    wire.power = node.output_power
                 };
-                if let Block::RedstoneRepeater { ref mut repeater } = block {
+                if let Block::Repeater(repeater) = block {
                     repeater.locked = node.locked;
                 }
                 world.set_block(*pos, *block);
-            }
-            // Keep custom IO nodes with override marked as changed
-            // so they continue syncing their visual state
-            if !(node.is_io && node.custom_io_override) {
-                node.changed = false;
             }
         }
     }
@@ -305,8 +317,8 @@ impl JITBackend for DirectBackend {
             
             // Update the block state immediately so it's synced when flush() is called.
             // This ensures the wire's visual power level matches the redpiler signal.
-            if let Some((_, block)) = &mut self.blocks[node_id.index()] {
-                if let Block::RedstoneWire { ref mut wire } = block {
+            for (_, block) in &mut self.blocks[node_id.index()] {
+                if let Block::RedstoneWire(wire) = block {
                     wire.power = strength;
                 }
             }
@@ -411,13 +423,20 @@ impl fmt::Display for DirectBackend {
                 NodeType::Constant => format!("Constant({})", node.output_power),
                 NodeType::NoteBlock { .. } => "NoteBlock".to_string(),
             };
-            let pos = if let Some((pos, _)) = self.blocks[id] {
-                format!("{}, {}, {}", pos.x, pos.y, pos.z)
+            let pos = if !self.blocks[id].is_empty() {
+                let mut string = String::new();
+                for (idx, (pos, _)) in self.blocks[id].iter().enumerate() {
+                    if idx != 0 {
+                        write!(&mut string, "; ")?;
+                    }
+                    write!(&mut string, "{}, {}, {}", pos.x, pos.y, pos.z)?;
+                }
+                string
             } else {
                 "No Pos".to_string()
             };
             writeln!(f, "    n{} [ label = \"{}\\n({})\" ];", id, label, pos)?;
-            for link in node.updates.iter() {
+            for link in self.forward_links.get(&node.fwd_link_range) {
                 let out_index = link.node().index();
                 let distance = link.ss();
                 let color = if link.side() { ",color=\"blue\"" } else { "" };

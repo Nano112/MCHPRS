@@ -1,4 +1,5 @@
 use crate::items::Item;
+use mchprs_proc_macros::protocol_id;
 use mchprs_utils::{map, nbt_unwrap_val};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -58,12 +59,12 @@ impl ContainerType {
         }
     }
 
-    pub fn window_type(self) -> u8 {
+    pub fn window_type(self) -> i32 {
         // https://wiki.vg/Inventory
         match self {
-            ContainerType::Furnace => 14,
-            ContainerType::Barrel => 2,
-            ContainerType::Hopper => 16,
+            ContainerType::Furnace => protocol_id!("minecraft:menu", "minecraft:furnace"),
+            ContainerType::Barrel => protocol_id!("minecraft:menu", "minecraft:generic_9x3"),
+            ContainerType::Hopper => protocol_id!("minecraft:menu", "minecraft:hopper"),
         }
     }
 }
@@ -84,14 +85,19 @@ pub enum BlockEntity {
 impl BlockEntity {
     /// The protocol id for the block entity
     pub fn ty(&self) -> i32 {
+        macro_rules! block_entity_id {
+            ($name:literal) => {
+                protocol_id!("minecraft:block_entity_type", $name)
+            };
+        }
         match self {
-            BlockEntity::Comparator { .. } => 18,
+            BlockEntity::Comparator { .. } => block_entity_id!("minecraft:comparator"),
             BlockEntity::Container { ty, .. } => match ty {
-                ContainerType::Furnace => 0,
-                ContainerType::Barrel => 26,
-                ContainerType::Hopper => 17,
+                ContainerType::Furnace => block_entity_id!("minecraft:comparator"),
+                ContainerType::Barrel => block_entity_id!("minecraft:barrel"),
+                ContainerType::Hopper => block_entity_id!("minecraft:hopper"),
             },
-            BlockEntity::Sign(_) => 7,
+            BlockEntity::Sign(_) => block_entity_id!("minecraft:sign"),
         }
     }
 
@@ -102,15 +108,11 @@ impl BlockEntity {
         let mut inventory = Vec::new();
         for item in slots_nbt {
             let item_compound = nbt_unwrap_val!(item, Value::Compound);
-            let count = nbt_unwrap_val!(item_compound["Count"], Value::Byte);
-            let slot = nbt_unwrap_val!(item_compound["Slot"], Value::Byte);
-            let namespaced_name = nbt_unwrap_val!(
-                item_compound
-                    .get("Id")
-                    .or_else(|| item_compound.get("id"))?,
-                Value::String
-            );
-            let item_type = Item::from_name(namespaced_name.split(':').next_back()?);
+            let count = nbt_get_int(item_compound, "Count")? as i8;
+            let slot = nbt_get_int(item_compound, "Slot")? as i8;
+            let namespaced_name =
+                nbt_unwrap_val!(nbt_case_insensitive(item_compound, "Id")?, Value::String);
+            let item_type = Item::from_name(namespaced_name);
 
             let mut blob = nbt::Blob::new();
             for (k, v) in item_compound {
@@ -135,7 +137,7 @@ impl BlockEntity {
             inventory.push(InventoryEntry {
                 slot,
                 count,
-                id: item_type.unwrap_or(Item::Redstone {}).get_id(),
+                id: item_type.unwrap_or(Item::Redstone).get_id(),
                 nbt: tag,
             });
 
@@ -240,7 +242,7 @@ impl BlockEntity {
                 for entry in inventory {
                     let nbt = map! {
                         "Count" => nbt::Value::Byte(entry.count),
-                        "id" => nbt::Value::String("minecraft:".to_string() + Item::from_id(entry.id).get_name()),
+                        "id" => nbt::Value::String(Item::from_id(entry.id).get_name().to_owned()),
                         "Slot" => nbt::Value::Byte(entry.slot)
                     };
                     // TODO: item nbt data in containers
@@ -255,5 +257,24 @@ impl BlockEntity {
                 })
             }),
         }
+    }
+}
+
+fn nbt_case_insensitive<'a>(
+    compound: &'a HashMap<String, nbt::Value>,
+    name: &str,
+) -> Option<&'a nbt::Value> {
+    // It's not really case insensitive, this is really just checking both cases of the first character.
+    compound
+        .get(name)
+        .or_else(|| compound.get(&name.to_lowercase()))
+}
+
+fn nbt_get_int(compound: &HashMap<String, nbt::Value>, name: &str) -> Option<i32> {
+    let value = nbt_case_insensitive(compound, name)?;
+    match value {
+        nbt::Value::Byte(val) => Some(*val as i32),
+        nbt::Value::Int(val) => Some(*val),
+        _ => None,
     }
 }

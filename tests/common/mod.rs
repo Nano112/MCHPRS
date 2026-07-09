@@ -1,127 +1,9 @@
-use mchprs_blocks::block_entities::BlockEntity;
-use mchprs_blocks::blocks::{
-    Block, ComparatorMode, Lever, LeverFace, RedstoneComparator, RedstoneRepeater,
-};
+use mchprs_blocks::blocks::{Block, Comparator, ComparatorMode, LeverFace, Repeater};
 use mchprs_blocks::{BlockDirection, BlockPos};
 use mchprs_redpiler::{BackendVariant, Compiler, CompilerOptions};
 use mchprs_redstone::wire::make_cross;
-use mchprs_world::storage::Chunk;
-use mchprs_world::{TickEntry, TickPriority, World};
-
-#[derive(Clone)]
-pub struct TestWorld {
-    chunks: Vec<Chunk>,
-    to_be_ticked: Vec<TickEntry>,
-    size: i32,
-}
-
-impl TestWorld {
-    /// Create a new square world for testing with a size in chunks
-    pub fn new(size: i32) -> TestWorld {
-        let mut chunks = Vec::new();
-        for x in 0..size {
-            for z in 0..size {
-                chunks.push(Chunk::empty(x, z, size as usize));
-            }
-        }
-        TestWorld {
-            chunks,
-            to_be_ticked: Vec::new(),
-            size,
-        }
-    }
-
-    fn get_chunk_index_for_chunk(&self, chunk_x: i32, chunk_z: i32) -> usize {
-        (chunk_x * self.size + chunk_z).unsigned_abs() as usize
-    }
-
-    fn get_chunk_index_for_block(&self, block_x: i32, block_z: i32) -> Option<usize> {
-        let chunk_x = block_x >> 4;
-        let chunk_z = block_z >> 4;
-        if chunk_x >= self.size || chunk_z >= self.size || chunk_x < 0 || chunk_z < 0 {
-            return None;
-        }
-        Some(((chunk_x * self.size) + chunk_z).unsigned_abs() as usize)
-    }
-}
-
-impl World for TestWorld {
-    /// Returns the block state id of the block at `pos`
-    fn get_block_raw(&self, pos: BlockPos) -> u32 {
-        let chunk_index = match self.get_chunk_index_for_block(pos.x, pos.z) {
-            Some(idx) => idx,
-            None => return 0,
-        };
-        let chunk = &self.chunks[chunk_index];
-        chunk.get_block((pos.x & 0xF) as u32, pos.y as u32, (pos.z & 0xF) as u32)
-    }
-
-    /// Sets a block in storage. Returns true if a block was changed.
-    fn set_block_raw(&mut self, pos: BlockPos, block: u32) -> bool {
-        let chunk_index = match self.get_chunk_index_for_block(pos.x, pos.z) {
-            Some(idx) => idx,
-            None => return false,
-        };
-
-        // Check to see if block is within height limit
-        if pos.y >= self.size * 16 || pos.y < 0 {
-            return false;
-        }
-
-        let chunk = &mut self.chunks[chunk_index];
-        chunk.set_block(
-            (pos.x & 0xF) as u32,
-            pos.y as u32,
-            (pos.z & 0xF) as u32,
-            block,
-        )
-    }
-
-    fn delete_block_entity(&mut self, pos: BlockPos) {
-        let chunk_index = match self.get_chunk_index_for_block(pos.x, pos.z) {
-            Some(idx) => idx,
-            None => return,
-        };
-        let chunk = &mut self.chunks[chunk_index];
-        chunk.delete_block_entity(BlockPos::new(pos.x & 0xF, pos.y, pos.z & 0xF));
-    }
-
-    fn get_block_entity(&self, pos: BlockPos) -> Option<&BlockEntity> {
-        let chunk_index = self.get_chunk_index_for_block(pos.x, pos.z)?;
-        let chunk = &self.chunks[chunk_index];
-        chunk.get_block_entity(BlockPos::new(pos.x & 0xF, pos.y, pos.z & 0xF))
-    }
-
-    fn set_block_entity(&mut self, pos: BlockPos, block_entity: BlockEntity) {
-        let chunk_index = match self.get_chunk_index_for_block(pos.x, pos.z) {
-            Some(idx) => idx,
-            None => return,
-        };
-        let chunk = &mut self.chunks[chunk_index];
-        chunk.set_block_entity(BlockPos::new(pos.x & 0xF, pos.y, pos.z & 0xF), block_entity);
-    }
-
-    fn get_chunk(&self, x: i32, z: i32) -> Option<&Chunk> {
-        self.chunks.get(self.get_chunk_index_for_chunk(x, z))
-    }
-
-    fn get_chunk_mut(&mut self, x: i32, z: i32) -> Option<&mut Chunk> {
-        let chunk_idx = self.get_chunk_index_for_chunk(x, z);
-        self.chunks.get_mut(chunk_idx)
-    }
-
-    fn schedule_tick(&mut self, pos: BlockPos, delay: u32, priority: TickPriority) {
-        self.to_be_ticked.push(TickEntry {
-            pos,
-            ticks_left: delay,
-            tick_priority: priority,
-        });
-    }
-
-    fn pending_tick_at(&mut self, pos: BlockPos) -> bool {
-        self.to_be_ticked.iter().any(|e| e.pos == pos)
-    }
-}
+use mchprs_world::testing::TestWorld;
+use mchprs_world::World;
 
 struct RedpilerInstance {
     options: CompilerOptions,
@@ -135,8 +17,10 @@ impl RedpilerInstance {
             ..Default::default()
         };
         let mut compiler = Compiler::default();
-        let max = world.size * 16 - 1;
-        let bounds = (BlockPos::new(0, 0, 0), BlockPos::new(max, max, max));
+        let max_x = world.x_size * 16 - 1;
+        let max_y = world.y_size * 16 - 1;
+        let max_z = world.z_size * 16 - 1;
+        let bounds = (BlockPos::new(0, 0, 0), BlockPos::new(max_x, max_y, max_z));
         let monitor = Default::default();
         let ticks = world.to_be_ticked.clone();
         compiler.compile(world, bounds, options.clone(), ticks, monitor);
@@ -223,14 +107,16 @@ impl BackendRunner {
 }
 
 fn is_block_powered(block: Block) -> Option<bool> {
+    if let Some(powered) = block.clone().get_pressure_plate_powered() {
+        return Some(*powered);
+    }
     Some(match block {
-        Block::RedstoneComparator { comparator } => comparator.powered,
+        Block::Comparator(comparator) => comparator.powered,
         Block::RedstoneTorch { lit } => lit,
         Block::RedstoneWallTorch { lit, .. } => lit,
-        Block::RedstoneRepeater { repeater } => repeater.powered,
-        Block::Lever { lever } => lever.powered,
-        Block::StoneButton { button } => button.powered,
-        Block::StonePressurePlate { powered } => powered,
+        Block::Repeater(repeater) => repeater.powered,
+        Block::Lever { powered, .. } => powered,
+        Block::StoneButton { powered, .. } => powered,
         Block::RedstoneLamp { lit } => lit,
         Block::IronTrapdoor { powered, .. } => powered,
         Block::NoteBlock { powered, .. } => powered,
@@ -266,6 +152,8 @@ pub fn trapdoor() -> Block {
         facing: Default::default(),
         half: Default::default(),
         powered: false,
+        open: false,
+        waterlogged: false,
     }
 }
 
@@ -275,10 +163,9 @@ pub fn make_lever(world: &mut TestWorld, lever_pos: BlockPos) {
         world,
         lever_pos,
         Block::Lever {
-            lever: Lever {
-                face: LeverFace::Floor,
-                ..Default::default()
-            },
+            face: LeverFace::Floor,
+            facing: BlockDirection::West,
+            powered: false,
         },
     );
 }
@@ -293,25 +180,17 @@ pub fn make_repeater(
     place_on_block(
         world,
         repeater_pos,
-        Block::RedstoneRepeater {
-            repeater: RedstoneRepeater {
-                delay,
-                facing: direction,
-                ..Default::default()
-            },
-        },
+        Block::Repeater(Repeater {
+            delay,
+            facing: direction,
+            ..Default::default()
+        }),
     );
 }
 
 /// Creates a wire at `wire_pos` with a block of sandstone below it
 pub fn make_wire(world: &mut TestWorld, wire_pos: BlockPos) {
-    place_on_block(
-        world,
-        wire_pos,
-        Block::RedstoneWire {
-            wire: make_cross(0),
-        },
-    );
+    place_on_block(world, wire_pos, Block::RedstoneWire(make_cross(0)));
 }
 
 /// Creates a comparator at `comp_pos` with a block of sandstone below it
@@ -324,12 +203,10 @@ pub fn make_comparator(
     place_on_block(
         world,
         comp_pos,
-        Block::RedstoneComparator {
-            comparator: RedstoneComparator {
-                mode,
-                facing,
-                ..Default::default()
-            },
-        },
+        Block::Comparator(Comparator {
+            mode,
+            facing,
+            ..Default::default()
+        }),
     );
 }

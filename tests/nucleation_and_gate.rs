@@ -4,22 +4,22 @@ use common::*;
 use mchprs_blocks::blocks::Block;
 use mchprs_blocks::{BlockPos, BlockDirection};
 use mchprs_redpiler::{BackendVariant, Compiler, CompilerOptions};
-use mchprs_world::World;
+use mchprs_world::{testing::TestWorld, World};
 
 /// Test that mirrors the Nucleation AND gate setup exactly
 #[test]
 fn nucleation_and_gate_both_true() {
-    let mut world = TestWorld::new(1);
-    
+    let mut world = TestWorld::new(1, 1, 1);
+
     // Create the AND gate circuit exactly as in Nucleation
     // Y=1 layer (ground)
     make_wire(&mut world, pos(0, 1, 0)); // Input A (custom IO)
     make_wire(&mut world, pos(1, 1, 0));
-    world.set_block(pos(2, 1, 0), Block::Concrete { color: mchprs_blocks::BlockColorVariant::Gray });
-    
+    world.set_block(pos(2, 1, 0), Block::GrayConcrete);
+
     make_wire(&mut world, pos(0, 1, 2)); // Input B (custom IO)
     make_wire(&mut world, pos(1, 1, 2));
-    world.set_block(pos(2, 1, 2), Block::Concrete { color: mchprs_blocks::BlockColorVariant::Gray });
+    world.set_block(pos(2, 1, 2), Block::GrayConcrete);
     
     world.set_block(pos(3, 1, 1), Block::RedstoneWallTorch {
         lit: false,  // Starts false, will turn on when both torches are off

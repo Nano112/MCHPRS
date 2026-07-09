@@ -9,6 +9,7 @@ readme.workspace = true
 version.workspace = true
 license.workspace = true
 repository.workspace = true
+include.workspace = true
 
 [lib]
 proc-macro = true
@@ -16,3 +17,7 @@ proc-macro = true
 [dependencies]
 syn = { workspace = true }
 quote = { workspace = true }
+rustc-hash = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+nom = { workspace = true }

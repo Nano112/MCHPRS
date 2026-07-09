@@ -1,8 +1,13 @@
 use mchprs_blocks::blocks::{ComparatorMode, Instrument};
 use mchprs_blocks::BlockPos;
-use petgraph::stable_graph::{NodeIndex, StableGraph};
+// use petgraph::stable_graph::{NodeIndex, StableGraph};
+use smallvec::SmallVec;
+use stable_graph::{NodeIndex, StableGraph};
 
-pub type NodeIdx = NodeIndex;
+mod stable_graph;
+
+pub use stable_graph::{Direction, EdgeRef};
+pub type NodeIdx = NodeIndex<u32>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NodeType {
@@ -25,11 +30,27 @@ pub enum NodeType {
     Constant,
     NoteBlock {
         instrument: Instrument,
-        note: u32,
+        note: u8,
     },
 }
 
-#[derive(Debug, Clone, Default)]
+impl NodeType {
+    pub fn is_normally_input(&self) -> bool {
+        matches!(
+            self,
+            NodeType::Button | NodeType::Lever | NodeType::PressurePlate
+        )
+    }
+
+    pub fn is_normally_output(&self) -> bool {
+        matches!(
+            self,
+            NodeType::Trapdoor | NodeType::Lamp | NodeType::NoteBlock { .. }
+        )
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NodeState {
     pub powered: bool,
     pub repeater_locked: bool,
@@ -75,7 +96,8 @@ pub struct Annotations {}
 #[derive(Debug)]
 pub struct CompileNode {
     pub ty: NodeType,
-    pub block: Option<(BlockPos, u32)>,
+    pub block: SmallVec<[(BlockPos, u32); 1]>,
+    pub name: Option<String>,
     pub state: NodeState,
 
     pub is_input: bool,
@@ -95,7 +117,7 @@ pub enum LinkType {
     Side,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CompileLink {
     pub ty: LinkType,
     pub ss: u8,
@@ -121,4 +143,4 @@ impl CompileLink {
     }
 }
 
-pub type CompileGraph = StableGraph<CompileNode, CompileLink>;
+pub type CompileGraph = StableGraph<CompileNode, CompileLink, u32>;

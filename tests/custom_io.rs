@@ -1,10 +1,10 @@
 mod common;
 use common::*;
 
-use mchprs_blocks::blocks::Block;
-use mchprs_blocks::{BlockColorVariant, BlockDirection, BlockPos};
+use mchprs_blocks::blocks::{Block, Comparator, ComparatorMode, Repeater};
+use mchprs_blocks::{BlockDirection, BlockPos};
 use mchprs_redpiler::{BackendVariant, Compiler, CompilerOptions};
-use mchprs_world::World;
+use mchprs_world::{testing::TestWorld, World};
 
 /// BUG: Custom IO redstone wire doesn't propagate power to adjacent wires
 #[test]
@@ -12,7 +12,7 @@ fn custom_io_wire_doesnt_power_adjacent_wire() {
     let custom_io_pos = pos(0, 0, 0);
     let normal_wire_pos = pos(1, 0, 0);
 
-    let mut world = TestWorld::new(1);
+    let mut world = TestWorld::new(1, 1, 1);
     
     // Two adjacent wires: custom IO at X=0, normal at X=1
     make_wire(&mut world, custom_io_pos);
@@ -59,11 +59,11 @@ fn custom_io_adjacent_to_block_doesnt_power_torch() {
     let block_pos = pos(0, 1, 0);
     let torch_pos = pos(0, 2, 0);
 
-    let mut world = TestWorld::new(1);
+    let mut world = TestWorld::new(1, 1, 1);
     
     // Setup: wire -> block -> torch (vertically stacked)
     make_wire(&mut world, wire_pos);
-    world.set_block(block_pos, Block::Concrete { color: BlockColorVariant::Gray });
+    world.set_block(block_pos, Block::GrayConcrete);
     world.set_block(torch_pos, Block::RedstoneTorch { lit: true });
 
     let options = CompilerOptions {
@@ -111,15 +111,15 @@ fn comparator_subtract_ignores_custom_io_side_input() {
     let side_input_pos = pos(1, 1, 1);
     let output_pos = pos(0, 1, 0);
 
-    let mut world = TestWorld::new(1);
+    let mut world = TestWorld::new(1, 1, 1);
     
     // Base layer (Y=0)
-    world.set_block(pos(0, 0, 0), Block::Concrete { color: BlockColorVariant::Gray });
-    world.set_block(pos(1, 0, 0), Block::Concrete { color: BlockColorVariant::Gray });
-    world.set_block(pos(0, 0, 1), Block::Concrete { color: BlockColorVariant::Gray });
-    world.set_block(pos(1, 0, 1), Block::Concrete { color: BlockColorVariant::Gray });
-    world.set_block(pos(0, 0, 2), Block::Concrete { color: BlockColorVariant::Gray });
-    world.set_block(pos(1, 0, 2), Block::Concrete { color: BlockColorVariant::Gray });
+    world.set_block(pos(0, 0, 0), Block::GrayConcrete);
+    world.set_block(pos(1, 0, 0), Block::GrayConcrete);
+    world.set_block(pos(0, 0, 1), Block::GrayConcrete);
+    world.set_block(pos(1, 0, 1), Block::GrayConcrete);
+    world.set_block(pos(0, 0, 2), Block::GrayConcrete);
+    world.set_block(pos(1, 0, 2), Block::GrayConcrete);
     
     // Circuit: back_input -> comparator <- side_input  (Y=1)
     //                           ↓
@@ -127,13 +127,11 @@ fn comparator_subtract_ignores_custom_io_side_input() {
     make_wire(&mut world, back_input_pos);
     world.set_block(
         comparator_pos,
-        Block::RedstoneComparator {
-            comparator: mchprs_blocks::blocks::RedstoneComparator {
-                facing: BlockDirection::South,
-                mode: mchprs_blocks::blocks::ComparatorMode::Subtract,
-                powered: false,
-            },
-        },
+        Block::Comparator(Comparator {
+            facing: BlockDirection::South,
+            mode: ComparatorMode::Subtract,
+            powered: false,
+        }),
     );
     make_wire(&mut world, side_input_pos);
     make_wire(&mut world, output_pos);
@@ -192,12 +190,12 @@ fn comparator_subtract_with_repeater_works() {
     let side_input_pos = pos(2, 1, 1);
     let output_pos = pos(0, 1, 0);
 
-    let mut world = TestWorld::new(1);
+    let mut world = TestWorld::new(1, 1, 1);
     
     // Base layer (Y=0)
     for x in 0..3 {
         for z in 0..3 {
-            world.set_block(pos(x, 0, z), Block::Concrete { color: BlockColorVariant::Gray });
+            world.set_block(pos(x, 0, z), Block::GrayConcrete);
         }
     }
     
@@ -207,24 +205,20 @@ fn comparator_subtract_with_repeater_works() {
     make_wire(&mut world, back_input_pos);
     world.set_block(
         comparator_pos,
-        Block::RedstoneComparator {
-            comparator: mchprs_blocks::blocks::RedstoneComparator {
-                facing: BlockDirection::South,
-                mode: mchprs_blocks::blocks::ComparatorMode::Subtract,
-                powered: false,
-            },
-        },
+        Block::Comparator(Comparator {
+            facing: BlockDirection::South,
+            mode: ComparatorMode::Subtract,
+            powered: false,
+        }),
     );
     world.set_block(
         repeater_pos,
-        Block::RedstoneRepeater {
-            repeater: mchprs_blocks::blocks::RedstoneRepeater {
-                delay: 1,
-                facing: BlockDirection::East,
-                locked: false,
-                powered: false,
-            },
-        },
+        Block::Repeater(Repeater {
+            delay: 1,
+            facing: BlockDirection::East,
+            locked: false,
+            powered: false,
+        }),
     );
     make_wire(&mut world, side_input_pos);
     make_wire(&mut world, output_pos);
