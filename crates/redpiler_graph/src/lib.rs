@@ -1,6 +1,5 @@
 use bincode::{BincodeRead, Result};
 use serde::{Deserialize, Serialize};
-use smallvec::SmallVec;
 
 pub type NodeId = usize;
 
@@ -69,7 +68,13 @@ pub struct NodeState {
 pub struct Node {
     pub ty: NodeType,
     /// Position and protocol id for block
-    pub block: SmallVec<[(BlockPos, u32); 1]>,
+    pub block: Option<(BlockPos, u32)>,
+    /// Additional world blocks coalesced into this node (e.g. wire runs merged
+    /// in), each with its own block id. Empty in the common case. Used by
+    /// analysis/extraction consumers for graph→voxel provenance; the JIT
+    /// simulation backend never reads it, so it costs the simulation nothing.
+    #[serde(default)]
+    pub aliased_blocks: Vec<(BlockPos, u32)>,
     pub state: NodeState,
 
     pub facing_diode: bool,

@@ -78,10 +78,19 @@ fn convert_node(
             CNodeType::PoweredRail => NodeType::PoweredRail,
             CNodeType::ActivatorRail => NodeType::ActivatorRail,
         },
-        block: node
-            .block
+        block: node.block.map(|(pos, id)| {
+            (
+                BlockPos {
+                    x: pos.x,
+                    y: pos.y,
+                    z: pos.z,
+                },
+                id,
+            )
+        }),
+        aliased_blocks: node
+            .aliased_blocks
             .iter()
-            .copied()
             .map(|(pos, id)| {
                 (
                     BlockPos {
@@ -89,7 +98,7 @@ fn convert_node(
                         y: pos.y,
                         z: pos.z,
                     },
-                    id,
+                    *id,
                 )
             })
             .collect(),
@@ -105,6 +114,23 @@ fn convert_node(
     }
 }
 
+/// Lower an optimized [`CompileGraph`] to the serializable flat node list from
+/// the [`redpiler_graph`] crate. Shared by the `ExportGraph` pass and the public
+/// [`crate::Compiler::compile_graph`] extraction API so both produce identical
+/// output.
+pub(crate) fn lower_graph(graph: &CompileGraph) -> Vec<Node> {
+    let mut nodes_map =
+        FxHashMap::with_capacity_and_hasher(graph.node_count(), Default::default());
+    for node in graph.node_indices() {
+        nodes_map.insert(node, nodes_map.len());
+    }
+
+    graph
+        .node_indices()
+        .map(|idx| convert_node(graph, idx, &nodes_map))
+        .collect_vec()
+}
+
 pub struct ExportGraph;
 
 impl<W: World> Pass<W> for ExportGraph {
@@ -115,17 +141,7 @@ impl<W: World> Pass<W> for ExportGraph {
         _: &CompilerInput<'_, W>,
         _: &mut AnalysisInfos,
     ) {
-        let mut nodes_map =
-            FxHashMap::with_capacity_and_hasher(graph.node_count(), Default::default());
-        for node in graph.node_indices() {
-            nodes_map.insert(node, nodes_map.len());
-        }
-
-        let nodes = graph
-            .node_indices()
-            .map(|idx| convert_node(graph, idx, &nodes_map))
-            .collect_vec();
-
+        let nodes = lower_graph(graph);
         fs::write("redpiler_graph.bc", serialize(nodes.as_slice()).unwrap()).unwrap();
     }
 

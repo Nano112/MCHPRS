@@ -8,6 +8,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::ril::DumpGraph;
 
+pub(crate) use export_graph::lower_graph;
+
 use super::compile_graph::CompileGraph;
 use super::task_monitor::TaskMonitor;
 use super::{CompilerInput, CompilerOptions};
@@ -108,6 +110,26 @@ impl<W: World> PassRegistry<W> {
             .get(key)
             .map(|type_id| self.get_pass_from_id(*type_id))
     }
+}
+
+/// Structural ("pre-fold") pass pipeline for the ANALYSIS graph: runs only the
+/// graph-construction prefix and STOPS before ConstantFold / Coalesce, so the
+/// returned graph preserves the as-built structure — every component is its own
+/// node, inputs survive as inputs, nothing is folded or merged. With
+/// `CompilerOptions::optimize = false`, IdentifyNodes also keeps redstone wires
+/// as individual nodes. The simulation never uses this pipeline; it exists for
+/// graph→voxel analysis where the optimized graph discards too much structure.
+pub fn build_structural_pass_pipeline<'p, W: World>(
+    registry: &'p PassRegistry<W>,
+) -> PassPipeline<'p, W> {
+    let mut builder = PassPipelineBuilder::new(registry);
+
+    builder.add_pass::<identify_nodes::IdentifyNodes>();
+    builder.add_pass::<input_search::InputSearch>();
+    builder.add_pass::<clamp_weights::ClampWeights>();
+    builder.add_pass::<dedup_links::DedupLinks>();
+
+    builder.build()
 }
 
 pub trait AnalysisInfo: Any {}

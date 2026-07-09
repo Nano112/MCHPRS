@@ -107,6 +107,10 @@ impl BackendRunner {
             self.tick();
         }
     }
+
+    pub fn get_block(&self, pos: BlockPos) -> Block {
+        self.world.get_block(pos)
+    }
 }
 
 fn is_block_powered(block: Block) -> Option<bool> {

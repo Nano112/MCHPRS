@@ -1,7 +1,6 @@
 use mchprs_blocks::blocks::{ComparatorMode, Instrument};
 use mchprs_blocks::{BlockFacing, BlockPos};
 // use petgraph::stable_graph::{NodeIndex, StableGraph};
-use smallvec::SmallVec;
 use stable_graph::{NodeIndex, StableGraph};
 
 mod stable_graph;
@@ -105,7 +104,15 @@ pub struct Annotations {}
 #[derive(Debug)]
 pub struct CompileNode {
     pub ty: NodeType,
-    pub block: SmallVec<[(BlockPos, u32); 1]>,
+    pub block: Option<(BlockPos, u32)>,
+    /// World blocks that have been coalesced into this node and must
+    /// receive the same simulation state on flush. Each entry preserves
+    /// the alias's *own* block id so orientation-dependent fields
+    /// (e.g. a repeater's `facing`) survive the merge — the backend
+    /// only copies the simulation-relevant fields (`powered`, `lit`,
+    /// wire `power`, repeater `locked`) onto the alias's block before
+    /// writing it back. Empty in the common case.
+    pub aliased_blocks: Vec<(BlockPos, u32)>,
     pub name: Option<String>,
     pub state: NodeState,
 

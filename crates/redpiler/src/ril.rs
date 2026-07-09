@@ -209,9 +209,14 @@ fn dump_node(f: &mut impl fmt::Write, ctx: &FmtContext<'_>) -> fmt::Result {
         ),
     }?;
 
-    if !node.block.is_empty() {
+    let mut positions = node
+        .block
+        .into_iter()
+        .chain(node.aliased_blocks.iter().copied())
+        .peekable();
+    if positions.peek().is_some() {
         write!(f, "  # Loc: ")?;
-        for (idx, (pos, _)) in node.block.iter().copied().enumerate() {
+        for (idx, (pos, _)) in positions.enumerate() {
             if idx != 0 {
                 write!(f, ", ")?;
             }
@@ -653,6 +658,7 @@ impl RILModule {
                 state: component.node_state.clone(),
                 name: Some(component.name.clone()),
                 block: Default::default(),
+                aliased_blocks: Default::default(),
                 is_input: component.node_ty.is_normally_input(),
                 is_output: component.node_ty.is_normally_output(),
                 annotations: Default::default(),

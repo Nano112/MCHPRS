@@ -48,7 +48,11 @@ impl TickScheduler {
     const NUM_PRIORITIES: usize = 4;
     const NUM_QUEUES: usize = 16;
 
-    fn reset<W: World>(&mut self, world: &mut W, blocks: &[impl AsRef<[(BlockPos, Block)]>]) {
+    fn reset<W: World>(
+        &mut self,
+        world: &mut W,
+        blocks: &[Option<(BlockPos, Block, Vec<(BlockPos, Block)>)>],
+    ) {
         for (idx, queues) in self.queues_deque.iter().enumerate() {
             let delay = if self.pos >= idx {
                 idx + Self::NUM_QUEUES
@@ -57,14 +61,11 @@ impl TickScheduler {
             } - self.pos;
             for (entries, priority) in queues.0.iter().zip(Self::priorities()) {
                 for node in entries {
-                    let node_blocks = blocks[node.index()].as_ref();
-                    if node_blocks.is_empty() {
+                    let Some((pos, _, _)) = &blocks[node.index()] else {
                         warn!("Cannot schedule tick for node {:?} because block information is missing", node);
                         continue;
                     };
-                    for (pos, _) in node_blocks.iter().copied() {
-                        world.schedule_tick(pos, delay as u32, priority);
-                    }
+                    world.schedule_tick(*pos, delay as u32, priority);
                 }
             }
         }
@@ -117,7 +118,13 @@ enum Event {
 pub struct DirectBackend {
     nodes: Nodes,
     forward_links: ForwardLinks,
-    blocks: Vec<SmallVec<[(BlockPos, Block); 1]>>,
+    /// Per-node block info. The third element holds positions+blocks
+    /// that the Coalesce pass merged into this node. Each alias keeps
+    /// its *own* original Block so orientation-dependent fields
+    /// (repeater facing, etc.) survive — on flush the simulation-
+    /// relevant fields are stamped onto the alias's block before
+    /// writing it back.
+    blocks: Vec<Option<(BlockPos, Block, Vec<(BlockPos, Block)>)>>,
     pos_map: FxHashMap<BlockPos, NodeId>,
     scheduler: TickScheduler,
     events: Vec<Event>,
@@ -191,16 +198,20 @@ impl JITBackend for DirectBackend {
         let nodes = std::mem::take(&mut self.nodes);
 
         for (i, node) in nodes.into_inner().iter().enumerate() {
-            for (pos, block) in self.blocks[i].iter().copied() {
-                if matches!(node.ty, NodeType::Comparator { .. }) {
-                    let block_entity = BlockEntity::Comparator {
-                        output_strength: node.output_power,
-                    };
-                    world.set_block_entity(pos, block_entity);
-                }
+            let Some((pos, block, aliases)) = self.blocks[i].clone() else {
+                continue;
+            };
+            if matches!(node.ty, NodeType::Comparator { .. }) {
+                let block_entity = BlockEntity::Comparator {
+                    output_strength: node.output_power,
+                };
+                world.set_block_entity(pos, block_entity);
+            }
 
-                if io_only && !node.is_io {
-                    world.set_block(pos, block);
+            if io_only && !node.is_io {
+                world.set_block(pos, block);
+                for (alias_pos, alias_block) in &aliases {
+                    world.set_block(*alias_pos, *alias_block);
                 }
             }
         }
@@ -270,20 +281,19 @@ impl JITBackend for DirectBackend {
             if !(node.is_io && node.custom_io_override) {
                 node.changed = false;
             }
-            for (pos, block) in &mut self.blocks[i] {
-                if let Some(powered) = block_powered_mut(block) {
-                    *powered = node.powered
-                }
-                if let Block::IronTrapdoor { open, .. } = block {
-                    *open = node.powered;
-                }
-                if let Block::RedstoneWire(wire) = block {
-                    wire.power = node.output_power
-                };
-                if let Block::Repeater(repeater) = block {
-                    repeater.locked = node.locked;
-                }
-                world.set_block(*pos, *block);
+            let Some((pos, block, aliases)) = &mut self.blocks[i] else {
+                continue;
+            };
+            stamp_simulation_state(block, node.powered, node.output_power, node.locked);
+            world.set_block(*pos, *block);
+            // For every position the Coalesce pass merged into this
+            // node, stamp the same simulation-relevant fields onto
+            // the alias's *own* block (preserving orientation, etc.)
+            // and write that. Without this we'd overwrite e.g. a
+            // mirror-image repeater's `facing` with the survivor's.
+            for (alias_pos, alias_block) in aliases.iter_mut() {
+                stamp_simulation_state(alias_block, node.powered, node.output_power, node.locked);
+                world.set_block(*alias_pos, *alias_block);
             }
         }
     }
@@ -317,7 +327,7 @@ impl JITBackend for DirectBackend {
             
             // Update the block state immediately so it's synced when flush() is called.
             // This ensures the wire's visual power level matches the redpiler signal.
-            for (_, block) in &mut self.blocks[node_id.index()] {
+            if let Some((_, block, _)) = &mut self.blocks[node_id.index()] {
                 if let Block::RedstoneWire(wire) = block {
                     wire.power = strength;
                 }
@@ -334,6 +344,25 @@ impl JITBackend for DirectBackend {
 
 /// Set node for use in `update`. None of the nodes here have usable output power,
 /// so this function does not set that.
+/// Stamp the simulation-relevant fields (`powered`/`lit`, wire `power`,
+/// repeater `locked`) onto a block in-place, leaving everything else
+/// (orientation, decorative state, ...) alone. Used by `flush()` so a
+/// Coalesce-merged alias block keeps its own facing.
+fn stamp_simulation_state(block: &mut Block, powered: bool, output_power: u8, locked: bool) {
+    if let Some(p) = block_powered_mut(block) {
+        *p = powered;
+    }
+    if let Block::IronTrapdoor { open, .. } = block {
+        *open = powered;
+    }
+    if let Block::RedstoneWire(wire) = block {
+        wire.power = output_power;
+    }
+    if let Block::Repeater(repeater) = block {
+        repeater.locked = locked;
+    }
+}
+
 fn set_node(node: &mut Node, powered: bool) {
     node.powered = powered;
     node.changed = true;
@@ -426,13 +455,10 @@ impl fmt::Display for DirectBackend {
                 NodeType::PoweredRail => "PoweredRail".to_string(),
                 NodeType::ActivatorRail => "ActivatorRail".to_string(),
             };
-            let pos = if !self.blocks[id].is_empty() {
-                let mut string = String::new();
-                for (idx, (pos, _)) in self.blocks[id].iter().enumerate() {
-                    if idx != 0 {
-                        write!(&mut string, "; ")?;
-                    }
-                    write!(&mut string, "{}, {}, {}", pos.x, pos.y, pos.z)?;
+            let pos = if let Some((pos, _, aliases)) = &self.blocks[id] {
+                let mut string = format!("{}, {}, {}", pos.x, pos.y, pos.z);
+                for (alias_pos, _) in aliases {
+                    write!(&mut string, "; {}, {}, {}", alias_pos.x, alias_pos.y, alias_pos.z)?;
                 }
                 string
             } else {

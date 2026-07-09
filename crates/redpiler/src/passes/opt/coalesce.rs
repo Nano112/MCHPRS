@@ -2,6 +2,7 @@ use crate::compile_graph::{CompileGraph, Direction, LinkType, NodeIdx, NodeType}
 use crate::passes::{AnalysisInfos, Pass};
 use crate::{CompilerInput, CompilerOptions};
 use itertools::Itertools;
+use mchprs_blocks::BlockPos;
 use mchprs_world::World;
 use tracing::trace;
 
@@ -96,7 +97,18 @@ fn coalesce(graph: &mut CompileGraph, node: NodeIdx, into: NodeIdx) {
         let weight = graph.remove_edge(edge_idx).unwrap();
         graph.add_edge(into, dest, weight);
     }
-    if let Some(mut node) = graph.remove_node(node) {
-        graph[into].block.append(&mut node.block);
+
+    // The merged-away node may back a distinct world block whose visual
+    // state still needs syncing on flush. Carry its primary block (with
+    // its own block-id intact, so orientation fields like a repeater's
+    // facing survive) plus any already-merged aliases over to the
+    // surviving node.
+    let primary = graph[node].block;
+    let aliases: Vec<(BlockPos, u32)> = std::mem::take(&mut graph[node].aliased_blocks);
+    if let Some(entry) = primary {
+        graph[into].aliased_blocks.push(entry);
     }
+    graph[into].aliased_blocks.extend(aliases);
+
+    graph.remove_node(node);
 }

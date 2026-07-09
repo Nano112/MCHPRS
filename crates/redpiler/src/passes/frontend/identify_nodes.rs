@@ -18,7 +18,6 @@ use mchprs_redstone::{self, comparator, noteblock, wire};
 use mchprs_world::{for_each_block_optimized, World};
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde_json::Value;
-use smallvec::smallvec;
 use tracing::warn;
 
 pub struct IdentifyNodes;
@@ -170,7 +169,8 @@ fn for_pos<W: World>(
 
     let node_idx = graph.add_node(CompileNode {
         ty,
-        block: smallvec![(pos, id)],
+        block: Some((pos, id)),
+        aliased_blocks: Vec::new(),
         name: None,
         state,
 

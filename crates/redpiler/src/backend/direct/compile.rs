@@ -128,7 +128,11 @@ fn compile_node(
         CNodeType::NoteBlock { instrument, note } => {
             let noteblock_id = noteblock_info.len().try_into().unwrap();
             noteblock_info.push((
-                node.block.iter().copied().map(|(pos, _)| pos).collect(),
+                node.block
+                    .into_iter()
+                    .chain(node.aliased_blocks.iter().copied())
+                    .map(|(pos, _)| pos)
+                    .collect(),
                 *instrument,
                 *note,
             ));
@@ -190,19 +194,27 @@ pub fn compile(
     backend.blocks = graph
         .all_node_weights()
         .map(|node| {
-            node.block
-                .iter()
-                .copied()
-                .map(|(pos, id)| (pos, Block::from_id(id)))
-                .collect()
+            node.block.map(|(pos, id)| {
+                let aliases: Vec<(BlockPos, Block)> = node
+                    .aliased_blocks
+                    .iter()
+                    .map(|(p, alias_id)| (*p, Block::from_id(*alias_id)))
+                    .collect();
+                (pos, Block::from_id(id), aliases)
+            })
         })
         .collect();
     backend.nodes = Nodes::new(nodes);
 
-    // Create a mapping from block pos to backend NodeId
+    // Create a mapping from block pos to backend NodeId. Aliased
+    // positions (Coalesce siblings) all point at the surviving node so
+    // any per-position lookup still resolves.
     for i in 0..backend.blocks.len() {
-        for (pos, _) in backend.blocks[i].iter().copied() {
+        if let Some((pos, _, ref aliases)) = backend.blocks[i] {
             backend.pos_map.insert(pos, backend.nodes.get(i));
+            for (alias_pos, _) in aliases {
+                backend.pos_map.insert(*alias_pos, backend.nodes.get(i));
+            }
         }
     }
 
